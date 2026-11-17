@@ -24,7 +24,7 @@ async function rpc(fn, args) {
   if (!r.ok) throw new Error('Ошибка сервера ' + r.status);
   return r.json();
 }
-const ERR = { bad_code: 'Неверный код', locked: 'Слишком много попыток. Подожди 5 минут', bad_pin: 'Неверный PIN', no_ticket: 'Нужен билет 🎫', not_enough: 'Не хватает жетонов', too_many: 'Слишком много запросов ждут ответа', already: 'Уже отправлено', bad_path: 'Такой дороги нет', too_fast: 'Слишком быстро — это не засчитано', bad_steps: 'Минимум 100 шагов', bad_format: 'Неверный формат', on_trip: 'Кто-то из вас уже в пути', not_same_place: 'Вы должны быть в одном месте', has_challenge: 'У кого-то из вас уже есть жарыс', no_challenge: 'Вызов уже не действует', bad_transport: 'Этот транспорт нельзя', no_player: 'Нет такого игрока' };
+const ERR = { bad_code: 'Неверный код', locked: 'Слишком много попыток. Подожди 5 минут', bad_pin: 'Неверный PIN', no_ticket: 'Нужен билет 🎫', not_enough: 'Не хватает жетонов', too_many: 'Слишком много запросов ждут ответа', already: 'Уже отправлено', bad_path: 'Такой дороги нет', too_fast: 'Слишком быстро — это не засчитано', bad_steps: 'Минимум 100 шагов', bad_format: 'Неверный формат', on_trip: 'Кто-то из вас уже в пути', not_same_place: 'Вы должны быть в одном месте', has_challenge: 'У кого-то из вас уже есть жарыс', no_challenge: 'Вызов уже не действует', bad_transport: 'Этот транспорт нельзя', no_player: 'Нет такого игрока', no_rail: 'Здесь нет железной дороги', no_flight: 'Нет прямого рейса', no_stop: 'Сначала доедь до остановки', in_race: 'Во время жарыса пересаживаться нельзя' };
 const errText = e => ERR[e] || e || 'Что-то пошло не так';
 
 /* ---------- граф ---------- */
@@ -47,6 +47,38 @@ function shortest(from, to) {
   return { path, km: dist[to] };
 }
 const airKm = (a, b) => { const e = PUB.edges.find(e => e.mode === 'air' && ((e.a === a && e.b === b) || (e.a === b && e.b === a))); return e ? +e.km : null; };
+const locName = id => { const s = nname(id); return /[йя]$/.test(s) ? s.slice(0, -1) + 'е' : /а$/.test(s) ? s.slice(0, -1) + 'е' : /[бвгджзклмнпрстфхцчшщ]$/.test(s) ? s + 'е' : s; };
+const genName = id => { const s = nname(id); return /й$/.test(s) ? s.slice(0, -1) + 'я' : /[кгхжшчщ]а$/.test(s) ? s.slice(0, -1) + 'и' : /а$/.test(s) ? s.slice(0, -1) + 'ы' : /[бвгджзклмнпрстфхцчшщ]$/.test(s) ? s + 'а' : s; };
+const isRail = (a, b) => PUB.edges.some(e => e.mode === 'road' && e.rail && ((e.a === a && e.b === b) || (e.a === b && e.b === a)));
+const hasRail = id => PUB.edges.some(e => e.mode === 'road' && e.rail && (e.a === id || e.b === id));
+// доступность транспорта на маршруте (то же правило проверяет сервер)
+function trAvail(id, from, to, path) {
+  if (id === 'plane') {
+    const N = nodes();
+    if (!N[from]?.airport) return 'в ' + locName(from) + ' нет аэропорта';
+    if (!N[to]?.airport) return 'в ' + locName(to) + ' нет аэропорта';
+    if (!airKm(from, to)) return 'нет прямого рейса';
+    if (ME.tickets < 1) return 'нужен билет 🎫';
+  }
+  if (id === 'train') {
+    const bad = path.find(n => !hasRail(n)); if (bad) return 'в ' + locName(bad) + ' нет железной дороги';
+    for (let i = 0; i + 1 < path.length; i++) if (!isRail(path[i], path[i + 1])) return 'нет железной дороги ' + nname(path[i]) + ' — ' + nname(path[i + 1]);
+  }
+  return '';
+}
+function trRows(from, to, r, skip) {
+  const m = mult(ME.age), air = airKm(from, to);
+  return Object.entries(Z.TRANSPORT).filter(([id]) => id !== skip).map(([id, T]) => {
+    let est, km = r.km; const why = trAvail(id, from, to, r.path), dis = !!why;
+    if (id === 'plane') km = air || km;
+    const mm = T.noAge ? 1 : m;
+    if (T.engine === 'tap' || T.engine === 'alt' || T.engine === 'beat') est = `≈ ${fmt(Math.ceil(km / (T.perTap * mm)))} тапов`;
+    else { const sec = km / (T.perSec * mm); est = sec < 120 ? `≈ ${Math.ceil(sec)} сек` : `≈ ${Math.ceil(sec / 60)} мин`; }
+    const bonus = id === 'horse' && r.path.includes('KOR') ? ' · ×1.5 жетона рядом с Кордаем' : '';
+    return `<button class="opt${dis ? ' off' : ''}" data-tr="${id}" ${dis ? 'disabled' : ''}><span class="i">${T.icon}</span><span><b>${T.name}</b><small>${dis ? '🚫 ' + esc(why) : fmt(km) + ' км · ' + est + bonus}</small></span></button>`;
+  }).join('');
+}
+const interStops = trip => { let cum = 0; return trip.path.map((n, i) => { if (i > 0) cum += +trip.legs[i - 1]; return { n, at: cum, i }; }).slice(1, -1); };
 const mult = age => age <= 11 ? 1.6 : age <= 14 ? 1.25 : 1.0;
 function weekGoal() { let s = 0; for (const p of PUB.players) { const r = shortest(p.home, 'KOR'); s += r ? r.km : 0; } return s; }
 function tripPos(trip, doneOverride) {
@@ -179,8 +211,9 @@ function renderMapPanel() {
   const cfg = PUB.config, t = ME.trip; let h = racePanel();
   if (t) {
     const pct = Math.min(100, 100 * t.done / t.total), T = Z.TRANSPORT[t.transport];
-    h += `<h3>${T.icon} В пути: ${esc(nname(t.path[0]))} → ${esc(nname(t.path.at(-1)))}</h3><div class="bar"><i style="width:${pct}%"></i></div><div class="muted">${fmt(t.done)} из ${fmt(t.total)} км · ${T.name}</div>
-      <button class="big-btn teal" id="contBtn">Продолжить поездку ▶</button><button class="btn" style="margin-top:10px;width:100%" id="newBtn">Выбрать другой маршрут</button>`;
+    const org = t.origin || t.path[0], atStop = !t.challenge && interStops(t).find(s => (t.collected || []).includes(s.n) && Math.abs(s.at - t.done) < 0.05);
+    h += `<h3>${T.icon} В пути: ${esc(nname(org))} → ${esc(nname(t.path.at(-1)))}</h3>${org !== t.path[0] ? `<div class="muted">сейчас ${T.icon} из ${esc(genName(t.path[0]))}</div>` : ''}<div class="bar"><i style="width:${pct}%"></i></div><div class="muted">${fmt(t.done)} из ${fmt(t.total)} км · ${T.name}</div>
+      <button class="big-btn teal" id="contBtn">Продолжить поездку ▶</button>${atStop ? `<button class="big-btn" style="margin-top:10px" id="swBtn">🔄 Сменить транспорт в ${esc(locName(atStop.n))}</button>` : ''}<button class="btn" style="margin-top:10px;width:100%" id="newBtn">Выбрать другой маршрут</button>`;
   } else {
     h += `<h3>📍 Ты в: ${esc(nname(ME.location))}${ME.location === 'KOR' ? ' — у Ата и Әже 🏡' : ''}</h3><div class="muted">Куда поедем? К Ата и Әже в Кордай или в гости к брату/сестре.</div><button class="big-btn" id="newBtn">В путь! 🛣️</button>`;
   }
@@ -191,6 +224,7 @@ function renderMapPanel() {
   $('#mapPanel').innerHTML = h;
   $('#newBtn').onclick = () => openPlan();
   if ($('#contBtn')) $('#contBtn').onclick = () => openTrip();
+  if ($('#swBtn')) $('#swBtn').onclick = () => openTrip();
   bindRace();
 }
 
@@ -208,16 +242,8 @@ function openPlan(force) {
   $('#sheet').querySelectorAll('[data-to]').forEach(b => b.onclick = () => openTransport(b.dataset.to));
 }
 function openTransport(to) {
-  const here = ME.location, r = shortest(here, to), m = mult(ME.age), air = airKm(here, to);
-  const rows = Object.entries(Z.TRANSPORT).map(([id, T]) => {
-    let est, dis = false, km = r.km, why = '';
-    if (id === 'plane') { if (!air) { dis = true; why = 'нет прямого рейса'; } else if (ME.tickets < 1) { dis = true; why = 'нужен билет 🎫'; } km = air || km; }
-    const mm = T.noAge ? 1 : m;
-    if (T.engine === 'tap' || T.engine === 'alt' || T.engine === 'beat') est = `≈ ${fmt(Math.ceil(km / (T.perTap * mm)))} тапов`;
-    else { const sec = km / (T.perSec * mm); est = sec < 120 ? `≈ ${Math.ceil(sec)} сек` : `≈ ${Math.ceil(sec / 60)} мин`; }
-    const bonus = id === 'horse' && (r.path.includes('KOR')) ? ' · ×1.5 жетона рядом с Кордаем' : '';
-    return `<button class="opt" data-tr="${id}" ${dis ? 'disabled' : ''}><span class="i">${T.icon}</span><span><b>${T.name}</b><small>${dis ? why : fmt(km) + ' км · ' + est + bonus}</small></span></button>`;
-  }).join('');
+  const here = ME.location, r = shortest(here, to), m = mult(ME.age);
+  const rows = trRows(here, to, r);
   sheet(`<h2>${esc(nname(here))} → ${esc(nname(to))}</h2><div class="muted">Маршрут: ${r.path.map(nname).map(esc).join(' → ')}. ${m > 1 ? `Тебе нужно меньше тапов (×${m}), а км для семьи считаются честно.` : ''}</div>${rows}
     <button class="btn" style="width:100%;margin-top:12px" id="backPlan">← Назад</button>`);
   $('#backPlan').onclick = openPlan;
@@ -244,11 +270,13 @@ function openTrip() {
     nextEvent: rnd(35, 60), stamina: 100, fuel: getFuel(), lastSide: null, beatT0: performance.now(), lastBeat: -1, streak: 0, holding: false, timers: [], keys: [] };
   LS.del('zhol_pend_' + ME.id);
   show('trip');
-  $('#tripTitle').textContent = `${TR.icon} ${nname(trip.path[0])} → ${nname(trip.path.at(-1))}`;
+  $('#tripTitle').textContent = `${TR.icon} ${nname(trip.origin || trip.path[0])} → ${nname(trip.path.at(-1))}`;
+  T.inter = trip.challenge ? [] : interStops(trip); { const d0 = localDone(); T.acked = new Set(T.inter.filter(s => s.at < d0 - 0.05).map(s => s.n)); }
   $('#tripTok').textContent = ME.tokens;
   buildEngine(); drawTrip();
   T.timers.push(setInterval(flush, 2500), setInterval(tick, 100));
   if (trip.challenge) { T.timers.push(setInterval(racePoll, 4000)); racePoll(); }
+  const ns = nextStop(); if (ns && localDone() >= ns.at - 0.01) stopPrompt(ns);
 }
 function closeTrip(toApp = true) {
   if (!T) return;
@@ -285,12 +313,43 @@ function addKm(km, isTap) {
     }
     T.pendTaps++;
   }
-  const room = T.trip.total - localDone();
+  const ns = nextStop(), lim = ns ? Math.min(T.trip.total, ns.at + 0.002) : T.trip.total;
+  const room = lim - localDone();
   T.pendKm += Math.max(0, Math.min(km, room));
   T.lastProg = now;
+  if (ns && localDone() >= ns.at - 1e-6 && localDone() < T.trip.total - 1e-6) { flush(); drawTrip(); stopPrompt(ns); return true; }
   if (localDone() >= T.trip.total - 1e-6) { T.arriving = true; flush(); }
   drawTrip();
   return true;
+}
+const nextStop = () => T && T.inter ? T.inter.find(s => !T.acked.has(s.n)) : null;
+function stopPrompt(s) {
+  if (!T) return; T.paused = true; T.holding = false;
+  const TR = T.TR, dest = T.trip.path.at(-1);
+  sheet(`<div style="text-align:center"><div style="font-size:56px">📍</div><h2>Ты в ${esc(locName(s.n))}!</h2><p>Продолжить ${TR.on} ${TR.icon} или сменить транспорт? До ${esc(genName(dest))} осталось ${fmt(T.trip.total - s.at)} км.</p>
+    <button class="big-btn teal" id="stCont">Продолжить ${TR.icon}</button><button class="big-btn" style="margin-top:10px" id="stSw">Сменить транспорт 🔄</button></div>`, false);
+  $('#stCont').onclick = () => { if (!T) return; T.acked.add(s.n); T.paused = false; closeSheet(); drawTrip(); };
+  $('#stSw').onclick = () => openSwitch(s);
+}
+async function settle() {
+  for (let k = 0; k < 60 && T && (T.busy || T.pendKm > 0); k++) { if (!T.busy) await flush(); else await new Promise(r => setTimeout(r, 100)); }
+}
+function openSwitch(s) {
+  if (!T) return;
+  const dest = T.trip.path.at(-1), path = T.trip.path.slice(s.i), km = T.trip.legs.slice(s.i).reduce((x, y) => x + +y, 0);
+  sheet(`<h2>🔄 ${esc(nname(s.n))} → ${esc(nname(dest))}</h2><div class="muted">Дальше: ${path.map(nname).map(esc).join(' → ')}. Километры до ${esc(genName(s.n))} уже засчитаны.</div>${trRows(s.n, dest, { path, km }, T.tr)}
+    <button class="btn" style="width:100%;margin-top:12px" id="swBack">← Назад</button>`, false);
+  $('#swBack').onclick = () => stopPrompt(s);
+  $('#sheet').querySelectorAll('[data-tr]').forEach(b => b.onclick = async () => {
+    const tr = b.dataset.tr; $('#sheet').querySelectorAll('[data-tr]').forEach(x => x.disabled = true);
+    try {
+      await settle(); if (!T) return;
+      if (!(ME.trip?.collected || []).includes(s.n)) { toast('Ещё чуть-чуть до ' + genName(s.n) + '…'); T.paused = false; closeSheet(); return; }
+      const res = await rpc('zhol_switch_transport', { p: SESSION.id, code: SESSION.code, transport: tr });
+      if (!res.ok) { toast(errText(res.error)); return openSwitch(s); }
+      ME = res.me; closeTrip(false); toast(`Пересадка в ${locName(s.n)}: ${Z.TRANSPORT[tr].icon} ${Z.TRANSPORT[tr].name}`); openTrip();
+    } catch (e) { toast(e.offline ? 'Нет сети — пересадка только онлайн' : e.message); if (T) openSwitch(s); }
+  });
 }
 async function flush() {
   if (!T || T.busy) return;
@@ -358,7 +417,7 @@ function buildEngine() {
   if (T.tr === 'bike') h += `<div class="pads"><button class="pedal next" id="pl">◀ Левая</button><button class="pedal next" id="pr">Правая ▶</button></div>`;
   if (T.tr === 'horse') h += `<div class="beatwrap"><div class="beat" id="beat">🐎</div></div><div class="hint" id="combo">Лови ритм копыт: тык-тык-тык</div><div class="inline"><button class="btn" id="oats" style="display:none">🌾 Дать жем</button></div><button class="hoof" id="hoof">🐾 Цок!</button>`;
   if (T.tr === 'car') h += `<button class="gas" id="gas">⛽ Газ (держи)</button>`;
-  if (T.tr === 'bus' || T.tr === 'plane') h += `<div class="auto" id="auto"><div class="veh">${TR.icon}</div></div><div class="hint">${T.tr === 'bus' ? 'Едем, пока окно открыто. Лови бонусы!' : 'Летим! Не закрывай окно.'}</div>`;
+  if (T.tr === 'bus' || T.tr === 'train' || T.tr === 'plane') h += `<div class="auto" id="auto"><div class="veh">${TR.icon}</div></div><div class="hint">${T.tr !== 'plane' ? 'Едем, пока окно открыто. Лови бонусы!' : 'Летим! Не закрывай окно.'}</div>`;
   E.innerHTML = h;
   const down = (el, fn) => el.addEventListener('pointerdown', e => { e.preventDefault(); fn(e); });
   if (T.tr === 'walk') {
@@ -398,7 +457,7 @@ function buildEngine() {
     key('keydown', e => { if (e.code === 'Space') { e.preventDefault(); on(true); } });
     key('keyup', e => { if (e.code === 'Space') on(false); });
   }
-  if (T.tr === 'bus') T.timers.push(setInterval(spawnBonus, 9000));
+  if (T.tr === 'bus' || T.tr === 'train') T.timers.push(setInterval(spawnBonus, 9000));
 }
 function spawnBonus() {
   if (!T || T.paused || !$('#auto')) return;
@@ -417,7 +476,7 @@ function tick() {
     if (T.holding && T.fuel > 0) { addKm(TR.perSec * T.m * dt, false); T.fuel = Math.max(0, T.fuel - dt); if (T.fuel <= 0) toast('⛽ Топливо кончилось! Ждём заправку (+1% каждые 30 сек)'); }
     else T.fuel = Math.min(100, T.fuel + dt / 30);
     drawTrip();
-  } else if (T.tr === 'bus' || T.tr === 'plane') addKm(TR.perSec * dt, false);
+  } else if (T.tr === 'bus' || T.tr === 'train' || T.tr === 'plane') addKm(TR.perSec * dt, false);
   else if (now - T.lastProg > 1200) { T.stamina = Math.min(100, T.stamina + dt * (T.tr === 'horse' ? 6 : 10)); drawTrip(); }
   if (now - T.lastProg < 2000 && T.tr !== 'plane') { T.active += dt; if (T.active >= T.nextEvent) { T.active = 0; T.nextEvent = rnd(40, 70); miniEvent(); } }
 }
@@ -547,13 +606,14 @@ $('#famRefresh').onclick = () => { refreshFamily(); toast('Обновлено');
 const fdt = s => new Date(s).toLocaleString('ru-RU', { timeZone: 'Asia/Almaty', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 function tripLine(p) {
   if (!p.trip) return `📍 ${p.location === 'KOR' ? 'в Кордае, у Ата и Әже 🏡' : 'в ' + esc(nname(p.location))}`;
-  const T = Z.TRANSPORT[p.trip.transport], pct = Math.round(100 * p.trip.done / p.trip.total);
-  return `${T.icon} ${esc(nname(p.trip.path[0]))} → <b>${esc(nname(p.trip.path.at(-1)))}</b> · ${T.name.toLowerCase()} · ${pct}%`;
+  const T = Z.TRANSPORT[p.trip.transport], pct = Math.round(100 * p.trip.done / p.trip.total), org = p.trip.origin || p.trip.path[0];
+  return `${T.icon} ${esc(nname(org))} → <b>${esc(nname(p.trip.path.at(-1)))}</b>${org !== p.trip.path[0] ? `, сейчас ${T.icon} из ${esc(genName(p.trip.path[0]))}` : ''} · ${T.name.toLowerCase()} · ${pct}%`;
 }
 function actLine(a, P) {
   const p = P(a.player), d = a.data || {}, who = `${p.avatar} ${esc(p.name)}`;
   if (a.kind === 'arrive') return `${who} доехал(а): ${esc(nname(d.from))} → <b>${esc(nname(d.to))}</b> ${Z.TRANSPORT[d.transport]?.icon || ''} · ${fmt(d.km)} км`;
   if (a.kind === 'start') { const path = d.path || []; return `${who} выехал(а): ${esc(nname(path[0]))} → ${esc(nname(path.at(-1)))} ${Z.TRANSPORT[d.transport]?.icon || ''} · ${fmt(d.total)} км`; }
+  if (a.kind === 'switch') return `${who} пересел(а) в ${esc(locName(d.at))}: ${Z.TRANSPORT[d.old]?.icon || ''} → ${Z.TRANSPORT[d.new]?.icon || ''} (едет в ${esc(nname(d.to))})`;
   if (a.kind === 'ach') { const A = Z.ACH[d.a]; return `${who} получил(а) достижение ${A ? A.i + ' «' + A.t + '»' : ''}`; }
   return who;
 }
