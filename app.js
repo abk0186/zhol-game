@@ -584,7 +584,7 @@ function renderAch() {
 /* ---------- банк ---------- */
 const STATUS = { pending: ['wait', 'ждёт родителей'], approved: ['ok', 'подтверждено'], done: ['ok', 'выдано ✓'], rejected: ['no', 'отклонено'] };
 const byTxt = r => r.decided_by ? (r.decided_by === 'admin' ? 'Асет' : 'Родители') : '';
-const stTag = r => `<span class="tag ${STATUS[r.status][0]}">${STATUS[r.status][1]}${byTxt(r) && r.status !== 'pending' ? ' · ' + byTxt(r) : ''}</span>`;
+const stTag = r => `<span class="tag ${STATUS[r.status][0]}">${r.status === 'done' && r.kind !== 'reward' ? 'подтверждено ✓' : STATUS[r.status][1]}${byTxt(r) && r.status !== 'pending' ? ' · ' + byTxt(r) : ''}</span>`;
 function rateText(cfg) { return cfg.rate_preset === 'points' ? 'Жетоны — это очки: на что менять, решают взрослые.' : `1 🪙 = ${cfg.tenge_per_token} ₸ — обмен на настоящие награды делают взрослые.`; }
 function renderBank() {
   const cfg = PUB.config, cat = PUB.catalog || [], quests = (PUB.quests || []).filter(q => !q.player || q.player === ME.id);
@@ -892,7 +892,7 @@ function chatOpen() {
   $('#chatSub').textContent = c.who === 'admin' ? 'Вы пишете как «Асет (админ)»' : c.who === 'family' ? 'Вы пишете как ' + (FAMDATA?.family?.all ? '«Асет»' : '«Родители · ' + (FAMDATA?.family?.name || '') + '»') : 'Вся семья: 8 детей, родители и Асет';
   $('#chatList').innerHTML = '<div class="empty">Загружаю…</div>'; chatFit();
   chatTick(true); clearInterval(CHAT.timer); CHAT.timer = setInterval(() => { if (CHAT.open) chatTick(); }, 5000);
-  if (matchMedia('(pointer:fine)').matches) $('#chatIn').focus();
+  if (!matchMedia('(pointer:coarse)').matches) $('#chatIn').focus();
 }
 function chatClose() { if (!CHAT.open) return; CHAT.open = false; clearInterval(CHAT.timer); $('#chat').classList.add('hidden'); document.body.classList.remove('chat-on'); $('#chatIn').blur(); }
 async function chatSend() {
@@ -911,7 +911,7 @@ function chatCount() { const n = $('#chatIn').value.length; $('#chatCnt').textCo
 function chatFit() { const vv = window.visualViewport, el = $('#chat'); if (!vv || !CHAT.open) return; el.style.height = vv.height + 'px'; el.style.top = vv.offsetTop + 'px'; }
 if (window.visualViewport) { visualViewport.addEventListener('resize', () => { chatFit(); if (CHAT.open) $('#chatList').scrollTop = 1e9; }); visualViewport.addEventListener('scroll', chatFit); }
 $('#chatIn').addEventListener('input', chatCount);
-$('#chatIn').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && matchMedia('(pointer:fine)').matches) { e.preventDefault(); chatSend(); } });
+$('#chatIn').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && !matchMedia('(pointer:coarse)').matches) { e.preventDefault(); chatSend(); } });
 $('#chatSend').onclick = chatSend; $('#chatClose').onclick = chatClose;
 for (const id of ['kidChat', 'famChat', 'adminChat']) $('#' + id).onclick = chatOpen;
 

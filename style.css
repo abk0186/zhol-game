@@ -224,3 +224,4 @@ body.chat-on{overflow:hidden}
 .ccnt{position:absolute;right:76px;top:-18px;font-size:11px;color:var(--muted)}
 .card .empty,.chat-list .empty{border-color:#d9ccb3;color:var(--muted);background:rgba(0,0,0,.02)}
 .toast{z-index:50}
+@media(min-width:700px){.row.rq{flex-wrap:nowrap}.rqbtns{width:auto;margin-top:0;flex-wrap:nowrap}}
