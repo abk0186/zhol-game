@@ -9,7 +9,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏡</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=9">
+<link rel="stylesheet" href="style.css?v=10">
 </head>
 <body>
 <div id="net" class="net hidden">Нет сети — прогресс сохраняется на устройстве</div>
@@ -42,6 +42,7 @@
     <button data-tab="family">👨‍👩‍👧‍👦<span>Семья</span></button>
     <button data-tab="ach">🏅<span>Награды</span></button>
     <button data-tab="bank">🪙<span>Банк</span></button>
+    <button id="kidChat" class="chattab">💬<span>Чат</span><i class="chatnb nb hidden"></i></button>
   </nav>
   <main>
     <div class="tab" id="tab-map">
@@ -64,24 +65,31 @@
   <div class="route" id="route"></div>
   <div class="trip-stats" id="tripStats"></div>
   <div class="engine" id="engine"></div>
-  <div class="toast" id="toast"></div>
 </section>
 
-<!-- СЕМЬЯ (только просмотр) -->
+<!-- СЕМЬЯ (родители: прогресс + запросы детей) -->
 <section id="parent" class="screen hidden">
-  <header class="top"><div class="me"><div class="av" style="background:#f5a524">👪</div><div><b id="famName">Семья</b><small>Только просмотр · обновляется каждую минуту</small></div></div><div class="chips"><button class="chip btn-ghost" id="famHome" title="Наверх">🏠</button><button class="chip btn-ghost" id="famRefresh" title="Обновить">↻</button><button class="chip btn-ghost" id="famExit">Выйти</button></div></header>
+  <header class="top"><div class="me"><div class="av" style="background:#f5a524">👪</div><div><b id="famName">Семья</b><small>Прогресс и запросы детей · обновляется каждую минуту</small></div></div><div class="chips"><button class="chip famnb hidden" id="famBadge" title="Ждут ответа" onclick="document.getElementById('famReqs').scrollIntoView({behavior:'smooth'})"></button><button class="chip btn-ghost cbtn" id="famChat" title="Чат">💬<i class="chatnb nb hidden"></i></button><button class="chip btn-ghost" id="famHome" title="Наверх">🏠</button><button class="chip btn-ghost" id="famRefresh" title="Обновить">↻</button><button class="chip btn-ghost" id="famExit">Выйти</button></div></header>
   <main id="parentMain" class="fam"></main>
 </section>
 
 <!-- РОДИТЕЛИ -->
 <section id="admin" class="screen hidden">
-  <header class="top"><div class="me"><b>Режим родителей</b></div><div class="chips"><button class="chip btn-ghost" id="adminHome">🏠 Домой</button><button class="chip btn-ghost" id="adminExit">✕ Выйти</button></div></header>
+  <header class="top"><div class="me"><b>Режим родителей</b></div><div class="chips"><button class="chip btn-ghost cbtn" id="adminChat" title="Чат">💬<i class="chatnb nb hidden"></i></button><button class="chip btn-ghost" id="adminHome">🏠 Домой</button><button class="chip btn-ghost" id="adminExit">✕ Выйти</button></div></header>
   <main id="adminMain" class="admin"></main>
 </section>
 
+<!-- ЧАТ -->
+<section id="chat" class="chat hidden" aria-label="Семейный чат">
+  <header class="chat-top"><div><b>💬 Семейный чат</b><small id="chatSub"></small></div><button class="chip btn-ghost" id="chatClose" title="Закрыть">✕</button></header>
+  <div class="chat-list" id="chatList"></div>
+  <div class="chat-in"><textarea id="chatIn" rows="1" maxlength="300" placeholder="Сообщение… 😊" enterkeyhint="send" autocomplete="off"></textarea><span id="chatCnt" class="ccnt"></span><button class="big-btn teal" id="chatSend" aria-label="Отправить">➤</button></div>
+</section>
+
+<div class="toast" id="toast"></div>
 <div id="modal" class="modal hidden"><div class="sheet" id="sheet"></div></div>
 
-<script src="data.js?v=9"></script>
-<script src="app.js?v=9"></script>
+<script src="data.js?v=10"></script>
+<script src="app.js?v=10"></script>
 </body>
 </html>

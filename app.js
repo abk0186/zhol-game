@@ -144,14 +144,14 @@ async function boot() {
   show('login');
 }
 $('#toParent').onclick = () => codePad('Администратор', 'Введите PIN (по умолчанию 0000 — смените его)', { min: 4, max: 8, onSubmit: async (pin, fail) => {
-  try { const r = await rpc('zhol_admin', { pin, action: 'overview', payload: {} }); if (!r.ok) return fail(errText(r.error)); PIN = pin; ADMIN = r; closeSheet(); show('admin'); renderAdmin(); }
+  try { const r = await rpc('zhol_admin', { pin, action: 'overview', payload: {} }); if (!r.ok) return fail(errText(r.error)); PIN = pin; ADMIN = r; closeSheet(); show('admin'); renderAdmin(); setTimeout(() => chatTick(), 300); }
   catch (e) { fail(e.offline ? 'Нет сети' : e.message); }
 } });
-$('#logout').onclick = () => { if (!confirm('Выйти? На этом устройстве нужно будет снова ввести код.')) return; LS.del('zhol_me'); SESSION = null; ME = null; show('login'); renderKids(); };
+$('#logout').onclick = () => { if (!confirm('Выйти? На этом устройстве нужно будет снова ввести код.')) return; LS.del('zhol_me'); SESSION = null; ME = null; chatClose(); chatBadge(0); show('login'); renderKids(); };
 
 /* ---------- приложение ---------- */
 let pollT;
-function enterApp() { show('app'); renderApp(); clearInterval(pollT); pollT = setInterval(() => { if (!$('#app').classList.contains('hidden')) refresh(); }, 30000); }
+function enterApp() { show('app'); renderApp(); setTimeout(() => chatTick(), 300); clearInterval(pollT); pollT = setInterval(() => { if (!$('#app').classList.contains('hidden')) refresh(); }, 30000); }
 async function refresh() {
   try { await loadPub(); const r = await rpc('zhol_login', { p: SESSION.id, code: SESSION.code }); if (r.ok) { ME = r.me; REQS = r.requests; } } catch (e) {}
   renderApp();
@@ -582,15 +582,17 @@ function renderAch() {
   $('#tab-ach').innerHTML = h;
 }
 /* ---------- банк ---------- */
-const STATUS = { pending: ['wait', 'ждёт взрослых'], approved: ['ok', 'одобрено'], done: ['ok', 'выдано ✓'], rejected: ['no', 'отклонено'] };
+const STATUS = { pending: ['wait', 'ждёт родителей'], approved: ['ok', 'подтверждено'], done: ['ok', 'выдано ✓'], rejected: ['no', 'отклонено'] };
+const byTxt = r => r.decided_by ? (r.decided_by === 'admin' ? 'Асет' : 'Родители') : '';
+const stTag = r => `<span class="tag ${STATUS[r.status][0]}">${STATUS[r.status][1]}${byTxt(r) && r.status !== 'pending' ? ' · ' + byTxt(r) : ''}</span>`;
 function rateText(cfg) { return cfg.rate_preset === 'points' ? 'Жетоны — это очки: на что менять, решают взрослые.' : `1 🪙 = ${cfg.tenge_per_token} ₸ — обмен на настоящие награды делают взрослые.`; }
 function renderBank() {
   const cfg = PUB.config, cat = PUB.catalog || [], quests = (PUB.quests || []).filter(q => !q.player || q.player === ME.id);
-  let h = `<div class="card"><h3>🏦 Семейный банк</h3><div style="font-size:30px;font-weight:800">${ME.tokens} 🪙</div><div class="muted">${rateText(cfg)} Лимит заработка: ${cfg.daily_token_cap} 🪙 в день. Награды до ${cfg.small_reward_max} 🪙 одобряются сразу, дороже — после «да» родителей.</div></div>`;
+  let h = `<div class="card"><h3>🏦 Семейный банк</h3><div style="font-size:30px;font-weight:800">${ME.tokens} 🪙</div><div class="muted">${rateText(cfg)} Лимит заработка: ${cfg.daily_token_cap} 🪙 в день. Награды до ${cfg.small_reward_max} 🪙 одобряются сразу, дороже — после «да» родителей (запрос приходит твоим родителям).</div></div>`;
   h += `<div class="card"><h3>🎁 Награды</h3>` + cat.map(it => { const big = it.big || it.cost > cfg.small_reward_max; return `<div class="row"><div class="av">${esc(it.emoji || '🎁')}</div><div class="grow"><b>${esc(it.title)}</b><small>${it.cost} 🪙${cfg.rate_preset !== 'points' ? ' ≈ ' + fmt(it.cost * cfg.tenge_per_token) + ' ₸' : ''}${big ? ' · нужно одобрение' : ''}</small></div><button class="btn p" data-buy="${esc(it.id)}" ${ME.tokens < it.cost ? 'disabled style="opacity:.4"' : ''}>Обменять</button></div>`; }).join('') + `</div>`;
-  h += `<div class="card"><h3>📜 Задания от родителей</h3>${quests.length ? quests.map(q => { const r = REQS.find(x => x.kind === 'quest' && x.item?.id === q.id && x.status !== 'rejected'); return `<div class="row"><div class="av">⭐</div><div class="grow"><b>${esc(q.title)}</b><small>+${q.reward} 🪙</small></div>${r ? `<span class="tag ${STATUS[r.status][0]}">${STATUS[r.status][1]}</span>` : `<button class="btn p" data-quest="${q.id}">Сделал!</button>`}</div>`; }).join('') : '<div class="muted">Пока заданий нет.</div>'}</div>`;
-  h += `<div class="card"><h3>👟 Мои шаги за день</h3><div class="muted">Посмотри шаги в телефоне (Здоровье / Google Fit) и впиши. 1 шаг ≈ 0,7 м. Км добавятся после подтверждения взрослым, раз в день, до 30 000 шагов.</div><div class="inline" style="margin-top:8px"><input id="steps" type="number" inputmode="numeric" min="100" max="30000" placeholder="например, 8000"><button class="btn p" id="stepsBtn">Отправить</button></div></div>`;
-  h += `<div class="card"><h3>🧾 Мои запросы</h3>${REQS.length ? REQS.map(r => `<div class="row"><div class="grow"><b>${r.kind === 'reward' ? esc(r.item.title) + ' · ' + r.cost + ' 🪙' : r.kind === 'quest' ? '⭐ ' + esc(r.item.title) : '👟 ' + r.item.steps + ' шагов = ' + r.item.km + ' км'}</b><small>${new Date(r.created_at).toLocaleDateString('ru-RU')}${r.note ? ' · ' + esc(r.note) : ''}</small></div><span class="tag ${STATUS[r.status][0]}">${STATUS[r.status][1]}</span></div>`).join('') : '<div class="muted">Пока пусто.</div>'}</div>`;
+  h += `<div class="card"><h3>📜 Задания от родителей</h3>${quests.length ? quests.map(q => { const r = REQS.find(x => x.kind === 'quest' && x.item?.id === q.id && x.status !== 'rejected'); return `<div class="row"><div class="av">⭐</div><div class="grow"><b>${esc(q.title)}</b><small>+${q.reward} 🪙</small></div>${r ? stTag(r) : `<button class="btn p" data-quest="${q.id}">Сделал!</button>`}</div>`; }).join('') : '<div class="muted">Пока заданий нет.</div>'}</div>`;
+  h += `<div class="card"><h3>👟 Мои шаги за день</h3><div class="muted">Посмотри шаги в телефоне (Здоровье / Google Fit) и впиши. 1 шаг ≈ 0,7 м. Км добавятся после подтверждения родителями, раз в день, до 30 000 шагов.</div><div class="inline" style="margin-top:8px"><input id="steps" type="number" inputmode="numeric" min="100" max="30000" placeholder="например, 8000"><button class="btn p" id="stepsBtn">Отправить</button></div></div>`;
+  h += `<div class="card"><h3>🧾 Мои запросы</h3>${REQS.length ? REQS.map(r => `<div class="row"><div class="grow"><b>${r.kind === 'reward' ? esc(r.item.title) + ' · ' + r.cost + ' 🪙' : r.kind === 'quest' ? '⭐ ' + esc(r.item.title) : '👟 ' + r.item.steps + ' шагов = ' + r.item.km + ' км'}</b><small>${new Date(r.created_at).toLocaleDateString('ru-RU')}${r.note ? ' · ' + esc(r.note) : ''}</small></div>${stTag(r)}</div>`).join('') : '<div class="muted">Пока пусто.</div>'}</div>`;
   $('#tab-bank').innerHTML = h;
   $('#tab-bank').querySelectorAll('[data-buy]').forEach(b => b.onclick = () => { const it = cat.find(x => x.id === b.dataset.buy); if (confirm(`Обменять ${it.cost} 🪙 на «${it.title}»?`)) req('reward', { id: it.id }); });
   $('#tab-bank').querySelectorAll('[data-quest]').forEach(b => b.onclick = () => req('quest', { id: +b.dataset.quest }));
@@ -605,7 +607,7 @@ async function req(kind, payload) {
 $('#toFamily').onclick = async () => {
   let fams = [];
   try { fams = await rpc('zhol_families'); } catch (e) { return toast('Нет сети'); }
-  sheet(`<h2>👪 Вход для родителей</h2><div class="muted">Выберите свою семью. Здесь можно только смотреть прогресс детей.</div>` +
+  sheet(`<h2>👪 Вход для родителей</h2><div class="muted">Выберите свою семью. Здесь видно прогресс ваших детей и их запросы (награды, шаги, задания) — их можно подтвердить или отклонить.</div>` +
     fams.map(f => `<button class="opt" data-fam="${f.id}"><span class="i">${f.all ? '👨‍👩‍👧‍👦' : '🏡'}</span><span><b>${esc(f.name)}</b><small>${f.all ? 'все 8: ' + f.kids.map(k => k.avatar).join(' ') : f.kids.map(k => k.avatar + ' ' + esc(k.name)).join(', ')}</small></span></button>`).join('') +
     `<button class="btn" style="width:100%;margin-top:12px" onclick="document.getElementById('modal').click()">Отмена</button>`);
   $('#sheet').querySelectorAll('[data-fam]').forEach(b => b.onclick = () => {
@@ -620,14 +622,15 @@ $('#toFamily').onclick = async () => {
 ERR.bad_fcode = 'Неверный код семьи';
 let famPoll;
 function enterFamily(r) {
-  ME = null; show('parent'); renderFamilyView(r);
+  ME = null; show('parent'); renderFamilyView(r); setTimeout(() => chatTick(), 300);
   clearInterval(famPoll); famPoll = setInterval(refreshFamily, 60000);
 }
 async function refreshFamily() {
   if ($('#parent').classList.contains('hidden') || !FAM) return;
   try { const r = await rpc('zhol_family_login', { f: FAM.id, code: FAM.code }); if (r.ok) renderFamilyView(r); else if (r.error === 'bad_code') { famLogout(); alert('Код семьи изменился — войдите заново'); } } catch (e) {}
 }
-function famLogout() { clearInterval(famPoll); LS.del('zhol_fam'); LS.del('zhol_famdata'); LS.set('zhol_mode', ''); FAM = null; FAMDATA = null; show('login'); loadPub().then(renderKids).catch(() => {}); }
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { if (vis('parent')) refreshFamily(); chatTick(true); } });
+function famLogout() { chatClose(); chatBadge(0); clearInterval(famPoll); LS.del('zhol_fam'); LS.del('zhol_famdata'); LS.set('zhol_mode', ''); FAM = null; FAMDATA = null; show('login'); loadPub().then(renderKids).catch(() => {}); }
 $('#famExit').onclick = () => { if (confirm('Выйти из семейного просмотра?')) famLogout(); };
 $('#famRefresh').onclick = () => { refreshFamily(); toast('Обновлено'); };
 const fdt = s => new Date(s).toLocaleString('ru-RU', { timeZone: 'Asia/Almaty', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
@@ -659,10 +662,15 @@ function renderFamilyView(r) {
       <div class="kblock"><b>🏅 Достижения (${k.achievements.length}/${Object.keys(Z.ACH).length}):</b> ${k.achievements.length ? k.achievements.map(a => `<span class="tag" title="${esc(Z.ACH[a]?.d)}">${Z.ACH[a]?.i} ${esc(Z.ACH[a]?.t || a)}</span>`).join(' ') : 'пока нет'}</div>
       <div class="kblock"><b>🛣️ Последние поездки:</b> ${trips.length ? trips.map(a => `<div class="muted">${fdt(a.at)} — ${esc(nname(a.data.from))} → ${esc(nname(a.data.to))} ${Z.TRANSPORT[a.data.transport]?.icon || ''} ${fmt(a.data.km)} км</div>`).join('') : '<span class="muted">пока нет завершённых</span>'}</div></div>`;
   };
-  let h = '';
-  if (r.family.all) for (const fm of r.families || []) { const ks = r.kids.filter(k => k.family === fm.id); if (ks.length) h += `<h2 class="famhead">🏡 ${esc(fm.name)}</h2>` + ks.map(kidCard).join(''); }
-  else h = r.kids.map(kidCard).join('');
-  h = `<div class="fam-kids">${h}</div>`;
+  const RQ = r.requests || [], open = RQ.filter(q => q.status === 'pending' || q.status === 'approved'), past = RQ.filter(q => q.status === 'done' || q.status === 'rejected').slice(0, 5);
+  const KP = id => r.kids.find(k => k.id === id) || P(id);
+  const rqRow = q => { const k = KP(q.player); return `<div class="row rq"><div class="av" style="background:${k.color || '#eee'}33">${k.avatar}</div><div class="grow"><b>${esc(k.name)}: ${kindTxt(q)}</b><small>${fdt(q.created_at)} · ${stTag(q)}${q.note ? ' · ' + esc(q.note) : ''}</small></div>${q.status === 'pending' ? `<div class="rqbtns"><button class="btn p" data-fdec="${q.id}" data-s="approved">✅ Подтвердить</button><button class="btn r" data-fdec="${q.id}" data-s="rejected">❌ Отклонить</button></div>` : q.status === 'approved' ? `<div class="rqbtns"><button class="btn" data-fdec="${q.id}" data-s="done">🎁 Выдано</button></div>` : ''}</div>`; };
+  let h = `<div class="card fam-reqs" id="famReqs"><h3>📬 Запросы детей ${r.pending ? `<span class="nb">${r.pending}</span>` : ''}</h3><div class="muted">Подтвердите или отклоните — ребёнок сразу увидит ответ. Подтверждённую награду отметьте «Выдано», когда отдадите её.</div>${open.length ? open.map(rqRow).join('') : '<div class="empty">Новых запросов нет 👍</div>'}${past.length ? `<details><summary>Недавно решённые</summary>${past.map(rqRow).join('')}</details>` : ''}</div>`;
+  $('#famBadge').innerHTML = r.pending ? `📬 <b>${r.pending}</b>` : ''; $('#famBadge').classList.toggle('hidden', !r.pending);
+  let kh = '';
+  if (r.family.all) for (const fm of r.families || []) { const ks = r.kids.filter(k => k.family === fm.id); if (ks.length) kh += `<h2 class="famhead">🏡 ${esc(fm.name)}</h2>` + ks.map(kidCard).join(''); }
+  else kh = r.kids.map(kidCard).join('');
+  h += `<div class="fam-kids">${kh}</div>`;
   const f = PUB.family, goal = weekGoal(), wk = +f.week_km;
   h += `<div class="fam-all"><div class="card"><h3>🏁 Вся семья</h3><div class="muted">Цель недели — все 8 детей доезжают из дома до Ата и Әже (${fmt(goal)} км).</div><div class="bar"><i style="width:${Math.min(100, 100 * wk / goal)}%"></i></div>
       <div class="stats"><div class="stat"><b>${fmt(wk)}</b><small>км за неделю</small></div><div class="stat"><b>${Math.round(100 * wk / goal)}%</b><small>цели недели</small></div><div class="stat"><b>${fmt(f.total_km)}</b><small>км всего</small></div></div></div>
@@ -673,6 +681,17 @@ function renderFamilyView(r) {
     <div class="card"><h3>🕑 Последние события (${r.family.all ? 'все дети' : 'ваши дети'})</h3>${r.activity.length ? r.activity.slice(0, 15).map(a => `<div class="row"><div class="grow">${actLine(a, P)}<small>${fdt(a.at)}</small></div></div>`).join('') : '<div class="muted">Пока событий нет — дети ещё не выезжали.</div>'}</div></div>`;
   $('#parentMain').innerHTML = h;
   renderMap($('#pmap'), null);
+  $('#parentMain').querySelectorAll('[data-fdec]').forEach(b => b.onclick = () => famDecide(+b.dataset.fdec, b.dataset.s, b));
+}
+function kindTxt(r) { return r.kind === 'reward' ? `${esc(r.item.emoji || '🎁')} ${esc(r.item.title)} · ${r.cost} 🪙` : r.kind === 'quest' ? `⭐ ${esc(r.item.title)} (+${r.item.reward} 🪙)` : `👟 ${r.item.steps} шагов → ${r.item.km} км`; }
+ERR.not_your_kid = 'Это запрос не вашего ребёнка'; ERR.no_request = 'Запрос не найден'; ERR.approve_first = 'Сначала подтвердите'; ERR.already = 'Уже решено';
+async function famDecide(id, status, btn) {
+  if (!FAM) return;
+  let note = '';
+  if (status === 'rejected') { const v = prompt('Отклонить запрос? Можно написать ребёнку пару слов (необязательно):', ''); if (v === null) return; note = v.slice(0, 120); }
+  if (btn) btn.disabled = true;
+  try { const r = await rpc('zhol_family_decide', { f: FAM.id, code: FAM.code, id, status, note }); if (!r.ok) { toast(errText(r.error), 2500); refreshFamily(); return; } renderFamilyView(r); toast(status === 'approved' ? 'Подтверждено ✅' : status === 'rejected' ? 'Отклонено' : 'Отмечено: выдано 🎁'); }
+  catch (e) { toast(e.offline ? 'Нет сети' : e.message); if (btn) btn.disabled = false; }
 }
 
 /* ---------- родители ---------- */
@@ -680,11 +699,10 @@ async function adm(action, payload = {}) {
   try { const r = await rpc('zhol_admin', { pin: PIN, action, payload }); if (!r.ok) { alert(errText(r.error)); if (r.error === 'bad_pin' || r.error === 'locked') { show('login'); } return false; } ADMIN = r; renderAdmin(); return true; }
   catch (e) { alert(e.offline ? 'Нет сети' : e.message); return false; }
 }
-$('#adminExit').onclick = () => { PIN = null; ADMIN = null; show('login'); loadPub().then(renderKids).catch(() => {}); };
+$('#adminExit').onclick = () => { chatClose(); chatBadge(0); PIN = null; ADMIN = null; show('login'); loadPub().then(renderKids).catch(() => {}); };
 function renderAdmin() {
   const A = ADMIN, cfg = A.config, P = id => A.players.find(p => p.id === id) || { avatar: '?', name: id };
-  const kindTxt = r => r.kind === 'reward' ? `${esc(r.item.emoji || '🎁')} ${esc(r.item.title)} · ${r.cost} 🪙` : r.kind === 'quest' ? `⭐ ${esc(r.item.title)} (+${r.item.reward} 🪙)` : `👟 ${r.item.steps} шагов → ${r.item.km} км`;
-  let h = `<div class="card"><h3>📬 Запросы детей</h3>${A.requests.filter(r => r.status === 'pending' || r.status === 'approved').map(r => `<div class="row"><div class="av">${P(r.player).avatar}</div><div class="grow"><b>${esc(P(r.player).name)}: ${kindTxt(r)}</b><small>${new Date(r.created_at).toLocaleString('ru-RU')} · <span class="tag ${STATUS[r.status][0]}">${STATUS[r.status][1]}</span></small></div>
+  let h = `<div class="card"><h3>📬 Запросы детей</h3>${A.requests.filter(r => r.status === 'pending' || r.status === 'approved').map(r => `<div class="row"><div class="av">${P(r.player).avatar}</div><div class="grow"><b>${esc(P(r.player).name)}: ${kindTxt(r)}</b><small>${new Date(r.created_at).toLocaleString('ru-RU')} · ${stTag(r)}</small></div>
      ${r.status === 'pending' ? `<button class="btn p" data-dec="${r.id}" data-s="approved">✓</button><button class="btn r" data-dec="${r.id}" data-s="rejected">✕</button>` : `<button class="btn" data-dec="${r.id}" data-s="done">Выдано</button>`}</div>`).join('') || '<div class="muted">Новых запросов нет.</div>'}</div>`;
   h += `<div class="card"><h3>👧👦 Дети</h3><table><tr><th></th><th>Где</th><th>км нед./всего</th><th>🪙</th><th>🎫</th></tr>${A.players.map(p => `<tr><td>${p.avatar} <b>${esc(p.name)}</b>${p.locked ? ' 🔒' : ''}<br><button class="btn" style="padding:4px 8px;margin-top:4px" data-act="${p.id}">⚙︎</button></td><td>${p.trip ? '→ ' + esc(nname(p.trip.path.at(-1))) + ' (' + fmt(p.trip.done) + '/' + fmt(p.trip.total) + ')' : esc(nname(p.location))}</td><td>${fmt(p.week_km)} / ${fmt(p.km_total)}</td><td>${p.tokens}<br><small class="muted">сегодня ${p.today_tokens}</small></td><td>${p.tickets}</td></tr>`).join('')}</table></div>`;
   h += `<div class="card"><h3>💱 Курс жетонов и лимиты</h3>
@@ -700,7 +718,7 @@ function renderAdmin() {
     <button class="btn" id="catAdd" style="margin-top:8px">+ Добавить</button> <button class="btn p" id="catSave">Сохранить каталог</button></div>`;
   h += `<div class="card"><h3>📜 Бонусные задания</h3><label>Задание</label><input id="qT" placeholder="например: прочитать 20 страниц и рассказать Әже по телефону"><div class="inline" style="margin-top:8px"><input id="qR" type="number" value="15" min="1" style="max-width:90px"> 🪙 <select id="qP" style="flex:1"><option value="">Всем</option>${A.players.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select><button class="btn p" id="qAdd">Дать</button></div>
     ${A.quests.map(q => `<div class="row"><div class="grow"><b>${esc(q.title)}</b><small>+${q.reward} 🪙 · ${q.player ? esc(P(q.player).name) : 'всем'}</small></div><button class="btn" data-endq="${q.id}">Завершить</button></div>`).join('')}</div>`;
-  h += `<div class="card"><h3>👪 Коды семей (просмотр)</h3><div class="muted">Родители входят через «Вход для родителей» и видят прогресс без права что-то менять.</div>${(A.families || []).map(f => `<label>${esc(f.name)}${f.locked ? ' 🔒' : ''}</label><div class="inline"><input type="password" inputmode="numeric" maxlength="6" placeholder="новый код, 4–6 цифр" data-fcode="${f.id}"><button class="btn p" data-fsave="${f.id}">Сменить</button></div>`).join('')}</div>`;
+  h += `<div class="card"><h3>👪 Коды семей (просмотр)</h3><div class="muted">Родители входят через «Вход для родителей»: видят прогресс своих детей и подтверждают/отклоняют их запросы. Курс, каталог, лимиты и коды меняет только администратор.</div>${(A.families || []).map(f => `<label>${esc(f.name)}${f.locked ? ' 🔒' : ''}</label><div class="inline"><input type="password" inputmode="numeric" maxlength="6" placeholder="новый код, 4–6 цифр" data-fcode="${f.id}"><button class="btn p" data-fsave="${f.id}">Сменить</button></div>`).join('')}</div>`;
   h += `<div class="card"><h3>🔐 PIN администратора</h3><div class="inline"><input id="newPin" type="password" inputmode="numeric" placeholder="новый PIN, 4–8 цифр"><button class="btn p" id="pinSave">Сменить</button></div></div>`;
   h += `<div class="card"><h3>🛡️ Защита от накрутки</h3><div class="muted">Сервер не засчитывает больше 12 тапов в секунду, ограничивает скорость каждого транспорта и дневные лимиты. Последние срабатывания:</div>${A.suspicious.length ? A.suspicious.map(s => `<div class="row"><div class="grow"><b>${esc(P(s.player).name)}: ${s.kind === 'too_fast' ? 'слишком частые тапы' : 'урезано по скорости'}</b><small>${new Date(s.at).toLocaleString('ru-RU')}</small></div></div>`).join('') : '<div class="muted">Пусто 👍</div>'}</div>`;
   $('#adminMain').innerHTML = h;
@@ -826,6 +844,77 @@ function raceTripHtml(done, total, pct) {
   return { marker: op === null ? '' : `<div class="who opp" style="left:${op.toFixed(2)}%">${pl(o).avatar}</div>`, stat: `<div><b>${op === null ? '—' : Math.round(op) + '%'}</b><small>⚔️ ${esc(pl(o).name)} (ты ${Math.round(100 * done / total)}%)</small></div>` };
 }
 
+/* ---------- семейный чат ---------- */
+const CHAT = { open: false, msgs: [], last: 0, mod: false, key: '', sig: '', timer: null, busy: false };
+ERR.chat_slow = 'Не так быстро — подожди пару секунд'; ERR.chat_limit = 'На сегодня лимит 100 сообщений — продолжим завтра 🌙'; ERR.too_long = 'Слишком длинно — до 300 символов'; ERR.empty = 'Напиши что-нибудь'; ERR.not_allowed = 'Удалять может только админ';
+function chatId() {
+  if (vis('admin') && PIN) return { who: 'admin', uid: 'admin', code: PIN };
+  if (vis('parent') && FAM) return { who: 'family', uid: FAM.id, code: FAM.code };
+  if ((vis('app') || vis('trip')) && SESSION) return { who: 'kid', uid: SESSION.id, code: SESSION.code };
+  return null;
+}
+const seenKey = c => 'zhol_chat_seen_' + c.who + '_' + c.uid;
+function chatBadge(n) {
+  for (const el of document.querySelectorAll('.chatnb')) { el.textContent = n > 9 ? '9+' : n; el.classList.toggle('hidden', !n); }
+}
+async function chatFetch(c, after = 0) { return rpc('zhol_chat', { who: c.who, uid: c.uid, code: c.code, after }); }
+async function chatTick(force) {
+  const c = chatId(); if (!c || CHAT.busy) return;
+  if (!CHAT.open) {
+    const seen = LS.get(seenKey(c), null);
+    try { CHAT.busy = true; const r = await chatFetch(c, seen ?? 0); if (!r.ok) return;
+      if (seen === null) { LS.set(seenKey(c), r.last); return chatBadge(0); }
+      chatBadge(r.messages.filter(m => !m.mine && !m.deleted && m.kind !== 'system').length);
+    } catch (e) {} finally { CHAT.busy = false; }
+    return;
+  }
+  try { CHAT.busy = true; const r = await chatFetch(c, 0); if (r.ok) chatApply(r); } catch (e) {} finally { CHAT.busy = false; }
+}
+setInterval(() => { if (!CHAT.open && !vis('trip')) chatTick(); }, 20000);
+function chatApply(r) {
+  const c = chatId(); if (!c) return;
+  CHAT.msgs = r.messages; CHAT.mod = r.mod; CHAT.last = r.last; LS.set(seenKey(c), r.last); chatBadge(0);
+  const sig = r.messages.map(m => m.id + (m.deleted ? 'd' : '')).join(',') + CHAT.mod;
+  if (sig === CHAT.sig) return; CHAT.sig = sig; chatRender();
+}
+const ctime = s => { const d = new Date(s), t = d.toLocaleTimeString('ru-RU', { timeZone: 'Asia/Almaty', hour: '2-digit', minute: '2-digit' }); return new Date().toDateString() === d.toDateString() ? t : d.toLocaleDateString('ru-RU', { timeZone: 'Asia/Almaty', day: 'numeric', month: 'short' }) + ' ' + t; };
+function chatRender() {
+  const L = $('#chatList'), atBottom = L.scrollHeight - L.scrollTop - L.clientHeight < 80;
+  L.innerHTML = CHAT.msgs.length ? CHAT.msgs.map(m => m.kind === 'system' ? `<div class="cm sys"><span>${esc(m.text)}</span><small>${ctime(m.at)}</small>${CHAT.mod ? `<button class="cdel" data-cdel="${m.id}" title="Удалить">🗑</button>` : ''}</div>` :
+    `<div class="cm${m.mine ? ' mine' : ''}"><div class="cav" style="background:${m.color || (m.kind === 'admin' ? '#13283d' : '#f5a524')}">${m.avatar}</div><div class="cb"><div class="cn">${esc(m.name)} <small>${ctime(m.at)}</small>${CHAT.mod && !m.deleted ? `<button class="cdel" data-cdel="${m.id}" title="Удалить">🗑</button>` : ''}</div><div class="ct${m.deleted ? ' del' : ''}">${m.deleted ? 'сообщение удалено' : esc(m.text)}</div></div></div>`).join('')
+    : '<div class="empty">Пока тихо. Напиши первым — привет всей семье! 👋</div>';
+  L.querySelectorAll('[data-cdel]').forEach(b => b.onclick = () => chatDelete(+b.dataset.cdel));
+  if (atBottom || !CHAT.rendered) L.scrollTop = L.scrollHeight; CHAT.rendered = true;
+}
+function chatOpen() {
+  const c = chatId(); if (!c) return;
+  closeSheet(); CHAT.open = true; CHAT.sig = ''; CHAT.rendered = false; $('#chat').classList.remove('hidden'); document.body.classList.add('chat-on');
+  $('#chatSub').textContent = c.who === 'admin' ? 'Вы пишете как «Асет (админ)»' : c.who === 'family' ? 'Вы пишете как ' + (FAMDATA?.family?.all ? '«Асет»' : '«Родители · ' + (FAMDATA?.family?.name || '') + '»') : 'Вся семья: 8 детей, родители и Асет';
+  $('#chatList').innerHTML = '<div class="empty">Загружаю…</div>'; chatFit();
+  chatTick(true); clearInterval(CHAT.timer); CHAT.timer = setInterval(() => { if (CHAT.open) chatTick(); }, 5000);
+  if (matchMedia('(pointer:fine)').matches) $('#chatIn').focus();
+}
+function chatClose() { if (!CHAT.open) return; CHAT.open = false; clearInterval(CHAT.timer); $('#chat').classList.add('hidden'); document.body.classList.remove('chat-on'); $('#chatIn').blur(); }
+async function chatSend() {
+  const c = chatId(), inp = $('#chatIn'), t = inp.value.trim(); if (!c || !t) return;
+  if (t.length > 300) return toast(ERR.too_long);
+  $('#chatSend').disabled = true;
+  try { const r = await rpc('zhol_chat_send', { who: c.who, uid: c.uid, code: c.code, msg: t, after: 0 }); if (!r.ok) return toast(errText(r.error), 2500); inp.value = ''; chatCount(); CHAT.rendered = false; chatApply(r); $('#chatList').scrollTop = 1e9; }
+  catch (e) { toast(e.offline ? 'Нет сети' : e.message); }
+  finally { $('#chatSend').disabled = false; }
+}
+async function chatDelete(id) {
+  const c = chatId(); if (!c || !confirm('Удалить это сообщение для всех?')) return;
+  try { const r = await rpc('zhol_chat_delete', { who: c.who, uid: c.uid, code: c.code, id, after: 0 }); if (!r.ok) return toast(errText(r.error)); chatApply(r); toast('Удалено'); } catch (e) { toast(e.offline ? 'Нет сети' : e.message); }
+}
+function chatCount() { const n = $('#chatIn').value.length; $('#chatCnt').textContent = n > 250 ? (300 - n) : ''; $('#chatIn').style.height = 'auto'; $('#chatIn').style.height = Math.min(120, $('#chatIn').scrollHeight) + 'px'; }
+function chatFit() { const vv = window.visualViewport, el = $('#chat'); if (!vv || !CHAT.open) return; el.style.height = vv.height + 'px'; el.style.top = vv.offsetTop + 'px'; }
+if (window.visualViewport) { visualViewport.addEventListener('resize', () => { chatFit(); if (CHAT.open) $('#chatList').scrollTop = 1e9; }); visualViewport.addEventListener('scroll', chatFit); }
+$('#chatIn').addEventListener('input', chatCount);
+$('#chatIn').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && matchMedia('(pointer:fine)').matches) { e.preventDefault(); chatSend(); } });
+$('#chatSend').onclick = chatSend; $('#chatClose').onclick = chatClose;
+for (const id of ['kidChat', 'famChat', 'adminChat']) $('#' + id).onclick = chatOpen;
+
 /* ---------- навигация: Домой и кнопка «назад» ---------- */
 function setTab(t) {
   TAB = t; $('#tabs').querySelectorAll('button').forEach(x => x.classList.toggle('on', x.dataset.tab === t));
@@ -834,7 +923,7 @@ function setTab(t) {
 }
 const vis = id => !$('#' + id).classList.contains('hidden');
 function goHome() {
-  closeSheet();
+  closeSheet(); chatClose();
   if (T) { closeTrip(true); setTab('map'); toast('Поездка на паузе — продолжишь с карты'); return; }
   if (vis('admin')) { PIN = null; ADMIN = null; }
   if (ME && SESSION) { show('app'); setTab('map'); renderApp(); }
@@ -844,6 +933,7 @@ function goHome() {
 let lastBack = 0;
 function onBack() {
   if (!$('#modal').classList.contains('hidden')) { if (SHEET_LOCKED) goHome(); else closeSheet(); return true; }
+  if (CHAT.open) { chatClose(); return true; }
   if (vis('trip') || vis('admin')) { goHome(); return true; }
   if (vis('app') && TAB !== 'map') { setTab('map'); return true; }
   const now = Date.now();
