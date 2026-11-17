@@ -880,7 +880,8 @@ function chatApply(r) {
 const ctime = s => { const d = new Date(s), t = d.toLocaleTimeString('ru-RU', { timeZone: 'Asia/Almaty', hour: '2-digit', minute: '2-digit' }); return new Date().toDateString() === d.toDateString() ? t : d.toLocaleDateString('ru-RU', { timeZone: 'Asia/Almaty', day: 'numeric', month: 'short' }) + ' ' + t; };
 function chatRender() {
   const L = $('#chatList'), atBottom = L.scrollHeight - L.scrollTop - L.clientHeight < 80;
-  L.innerHTML = CHAT.msgs.length ? CHAT.msgs.map(m => m.kind === 'system' ? `<div class="cm sys"><span>${esc(m.text)}</span><small>${ctime(m.at)}</small>${CHAT.mod ? `<button class="cdel" data-cdel="${m.id}" title="Удалить">🗑</button>` : ''}</div>` :
+  const MS = CHAT.msgs.filter(m => !(m.kind === 'system' && m.deleted));
+  L.innerHTML = MS.length ? MS.map(m => m.kind === 'system' ? `<div class="cm sys"><span>${esc(m.text)}</span><small>${ctime(m.at)}</small>${CHAT.mod ? `<button class="cdel" data-cdel="${m.id}" title="Удалить">🗑</button>` : ''}</div>` :
     `<div class="cm${m.mine ? ' mine' : ''}"><div class="cav" style="background:${m.color || (m.kind === 'admin' ? '#13283d' : '#f5a524')}">${m.avatar}</div><div class="cb"><div class="cn">${esc(m.name)} <small>${ctime(m.at)}</small>${CHAT.mod && !m.deleted ? `<button class="cdel" data-cdel="${m.id}" title="Удалить">🗑</button>` : ''}</div><div class="ct${m.deleted ? ' del' : ''}">${m.deleted ? 'сообщение удалено' : esc(m.text)}</div></div></div>`).join('')
     : '<div class="empty">Пока тихо. Напиши первым — привет всей семье! 👋</div>';
   L.querySelectorAll('[data-cdel]').forEach(b => b.onclick = () => chatDelete(+b.dataset.cdel));
