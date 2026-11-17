@@ -183,7 +183,7 @@ function renderMap(svg = $('#map'), focusTrip = ME?.trip, doneOverride) {
   }
   if (focusTrip) {
     const pts = focusTrip.path.map(n => X[n]);
-    if (focusTrip.transport === 'plane') { const a = pts[0], b = pts[1]; s += `<path class="route-hl" stroke-dasharray="6 6" d="M${a} Q${(a[0] + b[0]) / 2 - 40},${(a[1] + b[1]) / 2} ${b}"/>`; }
+    if (focusTrip.transport === 'plane') { const a = pts[0], b = pts[1]; s += `<path class="route-hl" stroke-dasharray="6 6" d="M${a} L${b}"/>`; }
     else s += `<polyline class="route-hl" points="${pts.join(' ')}"/>`;
   }
   for (const n of PUB.nodes) {
@@ -235,7 +235,7 @@ function openPlan(force) {
   for (const p of PUB.players) if (p.id !== ME.id) (homes[p.home] ||= []).push(p);
   const list = PUB.nodes.filter(n => n.id !== here).map(n => ({ n, r: shortest(here, n.id) })).filter(x => x.r)
     .sort((a, b) => (b.n.id === 'KOR') - (a.n.id === 'KOR') || (!!homes[b.n.id]) - (!!homes[a.n.id]) || a.r.km - b.r.km);
-  sheet(`<h2>Куда едем?</h2><div class="muted">Отсюда: ${esc(nname(here))}${ME.trip ? ' · ⚠️ текущая поездка будет заменена (км уже засчитаны)' : ''}</div>` + list.map(({ n, r }) => {
+  sheet(`<h2>Куда едем?</h2><div class="muted">Отсюда: ${esc(nname(here))}${ME.trip ? ' · ⚠️ текущая поездка будет заменена (км уже засчитаны)' : ''}</div>${+ME.today_km >= +PUB.config.daily_km_cap ? `<div class="capnote">🛑 Сегодня уже ${fmt(PUB.config.daily_km_cap)} км — это дневной лимит. Можно выбрать маршрут, но ехать получится только завтра.</div>` : ''}` + list.map(({ n, r }) => {
     const who = homes[n.id]?.map(p => p.avatar + ' ' + esc(p.name)).join(', ');
     return `<button class="opt" data-to="${n.id}"><span class="i">${n.id === 'KOR' ? '🏡' : n.kind === 'city' ? '🏙️' : '🏘️'}</span><span><b>${esc(n.name)}${n.id === 'KOR' ? ' — к Ата и Әже' : ''}</b><small>${fmt(r.km)} км по дороге${who ? ' · в гости к: ' + who : ''}${n.souvenir ? ' · сувенир: ' + esc(n.souvenir) : ''}</small></span></button>`;
   }).join('') + `<button class="btn" style="width:100%;margin-top:12px" onclick="document.getElementById('modal').click()">Отмена</button>`);
@@ -295,6 +295,8 @@ async function flushNow() {
   catch (e) {}
 }
 $('#tripExit').onclick = goHome;
+const isAuto = tr => tr === 'bus' || tr === 'train' || tr === 'plane';
+const capLeft = () => Math.max(0, (+PUB.config.daily_km_cap || 2500) - (+ME.today_km || 0) - T.inflight - T.pendKm);
 const localDone = () => Math.min(T.trip.total, T.server + T.inflight + T.pendKm);
 
 function addKm(km, isTap) {
@@ -315,7 +317,9 @@ function addKm(km, isTap) {
     T.pendTaps++;
   }
   const ns = nextStop(), lim = ns ? Math.min(T.trip.total, ns.at + 0.002) : T.trip.total;
-  const room = lim - localDone();
+  const left = capLeft();
+  if (left <= 0.001) { if (!T.capped) { T.capped = true; T.holding = false; toast('🛑 На сегодня лимит км исчерпан — поездка продолжится завтра', 4000); drawTrip(); } return false; }
+  const room = Math.min(lim - localDone(), left);
   T.pendKm += Math.max(0, Math.min(km, room));
   T.lastProg = now;
   if (ns && localDone() >= ns.at - 1e-6 && localDone() < T.trip.total - 1e-6) { flush(); drawTrip(); stopPrompt(ns); return true; }
@@ -364,7 +368,12 @@ async function flush() {
     if (r.me) ME = r.me;
     if (!T) return;
     if (!r.ok) { toast(errText(r.error)); if (r.error === 'no_trip') return closeTrip(true); }
+    const before = T.server;
     T.server = ME.trip ? +ME.trip.done : T.trip.total;
+    // авто-транспорт: если сервер засчитал меньше из-за задержки сети, недосчитанное отправим ещё раз (сервер всё равно проверит темп)
+    const lost = km - (T.server - before);
+    if (r.ok && isAuto(T.tr) && ME.trip && lost > 0.001 && capLeft() > 0.001) T.pendKm += Math.min(lost, capLeft());
+    if (T.capped && capLeft() > 0.001) T.capped = false;
     if (T.tr === 'car' && ME.fuel != null && +ME.fuel < T.fuel - 1) T.fuel = +ME.fuel;
     $('#tripTok').textContent = ME.tokens;
     for (const ev of r.events || []) {
@@ -398,13 +407,13 @@ function arrival(events) {
 }
 function drawTrip() {
   if (!T) return;
-  const t = T.trip, done = localDone(), total = +t.total;
+  const t = T.trip, total = +t.total, done = T.shown = Math.max(T.shown || 0, localDone());
   let cum = 0; const stops = t.path.map((n, i) => { if (i > 0) cum += +t.legs[i - 1]; return { n, at: cum }; });
   const pct = x => (100 * x / total).toFixed(2);
   const next = stops.find(s => s.at > done + 1e-6);
   const RT = raceTripHtml(done, total);
   $('#route').innerHTML = `<div class="line"><div class="track"></div><div class="fill" style="width:${pct(done)}%"></div>${stops.map(s => `<div class="stop ${s.at <= done ? 'done' : ''}" style="left:${pct(s.at)}%"></div>`).join('')}<div class="who" style="left:${pct(done)}%">${T.TR.icon}</div>${RT.marker}</div>
-    <div class="names">${stops.length <= 5 ? stops.map(s => `<span>${esc(nname(s.n))}</span>`).join('') : `<span>${esc(nname(stops[0].n))}</span><span>…</span><span>${esc(nname(stops.at(-1).n))}</span>`}</div>`;
+    ${T.capped ? `<div class="capnote">🛑 На сегодня лимит ${fmt(PUB.config.daily_km_cap)} км. Поездка продолжится завтра — можно закрыть игру.</div>` : ''}<div class="names">${stops.length <= 5 ? stops.map(s => `<span>${esc(nname(s.n))}</span>`).join('') : `<span>${esc(nname(stops[0].n))}</span><span>…</span><span>${esc(nname(stops.at(-1).n))}</span>`}</div>`;
   $('#tripStats').innerHTML = `<div><b>${fmt(total - done)}</b><small>км осталось</small></div><div><b>${next ? esc(nname(next.n)) : '🏁'}</b><small>${next ? 'через ' + fmt(next.at - done) + ' км' : 'финиш'}</small></div>${RT.stat || `<div><b>${fmt(ME.today_km + T.pendKm + T.inflight)}</b><small>км сегодня</small></div>`}`;
   const meter = $('#meter'); if (meter) {
     const v = T.tr === 'car' ? T.fuel : T.stamina;
