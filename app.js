@@ -267,12 +267,13 @@ function openTrip() {
   const pend = LS.get('zhol_pend_' + ME.id, null);
   T = { trip, tr: trip.transport, TR, m: TR.noAge ? 1 : mult(ME.age), server: +trip.done, pendKm: pend?.km || 0, pendTaps: pend?.taps || 0, inflight: 0,
     lastFlush: performance.now() - (pend ? Math.min(pend.dur || 0, 60000) : 0), taps: [], intervals: [], blockedUntil: 0, paused: false, active: 0, lastProg: 0,
-    nextEvent: rnd(35, 60), stamina: 100, fuel: getFuel(), lastSide: null, beatT0: performance.now(), lastBeat: -1, streak: 0, holding: false, timers: [], keys: [] };
+    nextEvent: rnd(35, 60), stamina: 100, tired: false, fuel: ME.fuel != null ? +ME.fuel : getFuel(), lastSide: null, beatT0: performance.now(), lastBeat: -1, streak: 0, holding: false, timers: [], keys: [] };
   LS.del('zhol_pend_' + ME.id);
   show('trip');
   $('#tripTitle').textContent = `${TR.icon} ${nname(trip.origin || trip.path[0])} → ${nname(trip.path.at(-1))}`;
   T.inter = trip.challenge ? [] : interStops(trip); { const d0 = localDone(); T.acked = new Set(T.inter.filter(s => s.at < d0 - 0.05).map(s => s.n)); }
   $('#tripTok').textContent = ME.tokens;
+  T.empty = T.tr === 'car' && T.fuel < 1;
   buildEngine(); drawTrip();
   T.timers.push(setInterval(flush, 2500), setInterval(tick, 100));
   if (trip.challenge) { T.timers.push(setInterval(racePoll, 4000)); racePoll(); }
@@ -364,6 +365,7 @@ async function flush() {
     if (!T) return;
     if (!r.ok) { toast(errText(r.error)); if (r.error === 'no_trip') return closeTrip(true); }
     T.server = ME.trip ? +ME.trip.done : T.trip.total;
+    if (T.tr === 'car' && ME.fuel != null && +ME.fuel < T.fuel - 1) T.fuel = +ME.fuel;
     $('#tripTok').textContent = ME.tokens;
     for (const ev of r.events || []) {
       if (ev.type === 'new_city') toast(`Новый город: ${nname(ev.node)}! +${ev.tokens} 🪙`);
@@ -406,8 +408,19 @@ function drawTrip() {
   $('#tripStats').innerHTML = `<div><b>${fmt(total - done)}</b><small>км осталось</small></div><div><b>${next ? esc(nname(next.n)) : '🏁'}</b><small>${next ? 'через ' + fmt(next.at - done) + ' км' : 'финиш'}</small></div>${RT.stat || `<div><b>${fmt(ME.today_km + T.pendKm + T.inflight)}</b><small>км сегодня</small></div>`}`;
   const meter = $('#meter'); if (meter) {
     const v = T.tr === 'car' ? T.fuel : T.stamina;
-    meter.querySelector('i').style.width = v + '%'; meter.querySelector('span').textContent = (T.tr === 'car' ? '⛽ Топливо ' : '💪 Силы ') + Math.round(v) + '%';
+    meter.querySelector('i').style.width = v + '%'; meter.querySelector('span').textContent = T.tr === 'car' ? (T.empty ? '⛽ Бензин кончился · ' + Math.floor(v) + '%' : '⛽ Бензин ' + Math.round(v) + '%') : (T.tired ? '😮‍💨 Отдых… ' + Math.floor(v) + '% (нужно ' + REST_TO + '%)' : '💪 Силы ' + Math.round(v) + '%');
+    meter.classList.toggle('low', T.tr === 'car' ? T.empty : T.tired);
   }
+  if (T.tr === 'car') carUi();
+}
+const REST_TO = 30, FUEL_TO = 10;
+function tire(x, msg) { T.stamina = Math.max(0, T.stamina - x); if (T.stamina <= 0 && !T.tired) { T.tired = true; toast(msg, 2500); } }
+const tiredMsg = () => T.tr === 'horse' ? 'Ат устал 🐎 Пусть отдохнёт (до ' + REST_TO + '%) или дай жем' : 'Устал… отдохни немного — силы вернутся до ' + REST_TO + '%';
+const mmss = s => { s = Math.max(0, Math.ceil(s)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
+function carUi() {
+  const g = $('#gas'), e = $('#empty'); if (!g || !e) return;
+  g.classList.toggle('hidden', T.empty); e.classList.toggle('hidden', !T.empty);
+  if (T.empty) $('#emptyT').textContent = `Бак наполнится до ${FUEL_TO}% через ${mmss((FUEL_TO - T.fuel) * 30)} (+1% каждые 30 сек)`;
 }
 function key(ev, fn) { window.addEventListener(ev, fn); T.keys.push([ev, fn]); }
 function buildEngine() {
@@ -416,29 +429,29 @@ function buildEngine() {
   if (T.tr === 'walk') h += `<button class="stepbtn" id="step">👣 Шаг</button>`;
   if (T.tr === 'bike') h += `<div class="pads"><button class="pedal next" id="pl">◀ Левая</button><button class="pedal next" id="pr">Правая ▶</button></div>`;
   if (T.tr === 'horse') h += `<div class="beatwrap"><div class="beat" id="beat">🐎</div></div><div class="hint" id="combo">Лови ритм копыт: тык-тык-тык</div><div class="inline"><button class="btn" id="oats" style="display:none">🌾 Дать жем</button></div><button class="hoof" id="hoof">🐾 Цок!</button>`;
-  if (T.tr === 'car') h += `<button class="gas" id="gas">⛽ Газ (держи)</button>`;
+  if (T.tr === 'car') h += `<button class="gas" id="gas">⛽ Газ (держи)</button><div class="empty hidden" id="empty"><div class="et">⛽ Бензин кончился</div><div class="muted" id="emptyT"></div><button class="stepbtn" id="push">🫸 Толкать машину</button><div class="muted">Толкать — медленно, как пешком. Ещё может встретиться заправка, а в следующем городе можно пересесть на другой транспорт.</div></div>`;
   if (T.tr === 'bus' || T.tr === 'train' || T.tr === 'plane') h += `<div class="auto" id="auto"><div class="veh">${TR.icon}</div></div><div class="hint">${T.tr !== 'plane' ? 'Едем, пока окно открыто. Лови бонусы!' : 'Летим! Не закрывай окно.'}</div>`;
   E.innerHTML = h;
   const down = (el, fn) => el.addEventListener('pointerdown', e => { e.preventDefault(); fn(e); });
   if (T.tr === 'walk') {
-    down($('#step'), () => { if (T.stamina <= 0) return toast('Устал… отдохни пару секунд'); if (addKm(TR.perTap * m, true)) T.stamina = Math.max(0, T.stamina - 0.4); });
+    down($('#step'), () => { if (T.tired) return toast(tiredMsg()); if (addKm(TR.perTap * m, true)) tire(0.4, tiredMsg()); });
     key('keydown', e => { if (e.key === 'Enter' && !e.repeat) { e.preventDefault(); $('#step').dispatchEvent(new PointerEvent('pointerdown')); } });
   }
   if (T.tr === 'bike') {
-    const ped = side => { if (T.lastSide === side) return toast('По очереди: левая — правая!'); if (T.stamina <= 0) return toast('Отдохни немного'); if (addKm(TR.perTap * m, true)) { T.lastSide = side; T.stamina = Math.max(0, T.stamina - 0.5); $('#pl').classList.toggle('next', side === 'R'); $('#pr').classList.toggle('next', side === 'L'); } };
+    const ped = side => { if (T.lastSide === side) return toast('По очереди: левая — правая!'); if (T.tired) return toast(tiredMsg()); if (addKm(TR.perTap * m, true)) { T.lastSide = side; tire(0.5, tiredMsg()); $('#pl').classList.toggle('next', side === 'R'); $('#pr').classList.toggle('next', side === 'L'); } };
     down($('#pl'), () => ped('L')); down($('#pr'), () => ped('R'));
     key('keydown', e => { if (e.repeat) return; if (e.key === 'ArrowLeft') { e.preventDefault(); ped('L'); } if (e.key === 'ArrowRight') { e.preventDefault(); ped('R'); } });
   }
   if (T.tr === 'horse') {
     const P = 450;
     const hit = () => {
-      if (T.stamina <= 0) return toast('Ат устал 🐎 Дай отдохнуть или дай жем');
+      if (T.tired) return toast(tiredMsg());
       const now = performance.now(), ph = (now - T.beatT0) % P, dist = Math.min(ph, P - ph), idx = Math.round((now - T.beatT0) / P);
       if (idx === T.lastBeat) return;
       T.lastBeat = idx;
       const on = dist <= 100;
       if (addKm((on ? TR.perTap : TR.offBeat) * m, true)) {
-        T.stamina = Math.max(0, T.stamina - (on ? 1.2 : 2.5)); T.streak = on ? T.streak + 1 : 0;
+        tire(on ? 1.2 : 2.5, tiredMsg()); T.streak = on ? T.streak + 1 : 0;
         $('#combo').textContent = on ? (T.streak >= 8 ? `🔥 Ритм ×${T.streak}! Скачем!` : `В ритм! ×${T.streak}`) : 'Мимо ритма — медленнее';
       }
     };
@@ -451,10 +464,11 @@ function buildEngine() {
   }
   if (T.tr === 'car') {
     const g = $('#gas');
-    const on = v => { if (!T) return; T.holding = v; g.classList.toggle('on', v); };
+    const on = v => { if (!T) return; if (v && T.empty) return; T.holding = v; g.classList.toggle('on', v); };
     g.addEventListener('pointerdown', e => { e.preventDefault(); g.setPointerCapture?.(e.pointerId); on(true); });
     for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) g.addEventListener(ev, () => on(false));
-    key('keydown', e => { if (e.code === 'Space') { e.preventDefault(); on(true); } });
+    down($('#push'), () => { if (!T.empty) return; addKm(0.10 * m, true); });
+    key('keydown', e => { if (e.code === 'Space') { e.preventDefault(); if (T.empty) { if (!e.repeat) $('#push').dispatchEvent(new PointerEvent('pointerdown')); } else on(true); } });
     key('keyup', e => { if (e.code === 'Space') on(false); });
   }
   if (T.tr === 'bus' || T.tr === 'train') T.timers.push(setInterval(spawnBonus, 9000));
@@ -473,11 +487,13 @@ function tick() {
   if (document.hidden || T.paused) return;
   const TR = T.TR;
   if (T.tr === 'car') {
-    if (T.holding && T.fuel > 0) { addKm(TR.perSec * T.m * dt, false); T.fuel = Math.max(0, T.fuel - dt); if (T.fuel <= 0) toast('⛽ Топливо кончилось! Ждём заправку (+1% каждые 30 сек)'); }
+    if (!T.empty && T.fuel <= 0) T.empty = true;
+    if (T.holding && !T.empty) { const use = Math.min(dt, T.fuel); addKm(TR.perSec * T.m * use, false); T.fuel = Math.max(0, T.fuel - dt); if (T.fuel <= 0) { T.empty = true; T.holding = false; $('#gas')?.classList.remove('on'); toast('⛽ Бензин кончился! Жди заправку или толкай машину', 3000); } }
     else T.fuel = Math.min(100, T.fuel + dt / 30);
+    if (T.empty && T.fuel >= FUEL_TO) { T.empty = false; toast('⛽ В баке ' + Math.round(T.fuel) + '% — можно ехать!'); }
     drawTrip();
   } else if (T.tr === 'bus' || T.tr === 'train' || T.tr === 'plane') addKm(TR.perSec * dt, false);
-  else if (now - T.lastProg > 1200) { T.stamina = Math.min(100, T.stamina + dt * (T.tr === 'horse' ? 6 : 10)); drawTrip(); }
+  else { if (now - T.lastProg > 1200) T.stamina = Math.min(100, T.stamina + dt * (T.tr === 'horse' ? 6 : 10)); if (T.tired && T.stamina >= REST_TO) { T.tired = false; toast('💪 Отдохнул — вперёд!'); } drawTrip(); }
   if (now - T.lastProg < 2000 && T.tr !== 'plane') { T.active += dt; if (T.active >= T.nextEvent) { T.active = 0; T.nextEvent = rnd(40, 70); miniEvent(); } }
 }
 
@@ -489,12 +505,14 @@ function miniEvent() {
   if (tr === 'car' || tr === 'bus') pool.push('jam');
   if (tr === 'horse') pool.push('oats', 'oats');
   if (tr === 'car') pool.push('fuel');
+  if (tr === 'car' && T.empty) pool.push('fuel', 'fuel', 'fuel');
   const ev = pick(pool); T.paused = true; T.holding = false;
   const resume = () => { closeSheet(); if (T) T.paused = false; };
+  const refuel = async kind => { try { const r = await rpc('zhol_refuel', { p: SESSION.id, code: SESSION.code, kind }); if (r.me) ME = r.me; if (T && r.added > 0 && ME.fuel != null) T.fuel = +ME.fuel; return r.added || 0; } catch (e) { return 0; } };
   const bonus = async kind => { try { const r = await rpc('zhol_bonus', { p: SESSION.id, code: SESSION.code, kind }); if (r.me) ME = r.me; if ($('#tripTok')) $('#tripTok').textContent = ME.tokens; return r.tokens || 0; } catch (e) { return 0; } };
   if (ev === 'tea') {
     sheet(`<div style="text-align:center"><div style="font-size:56px">🍵</div><h2>Остановка на чай</h2><p>Апа у дороги налила чай с баурсаками. Силы и топливо +30!</p><button class="big-btn teal" id="ok">Рахмет!</button></div>`, false);
-    $('#ok').onclick = () => { if (T) { T.stamina = Math.min(100, T.stamina + 30); T.fuel = Math.min(100, T.fuel + 30); } resume(); };
+    $('#ok').onclick = async () => { if (T) T.stamina = Math.min(100, T.stamina + 30); if (T && T.tr === 'car') { const n = await refuel('tea'); if (n) toast('⛽ +' + n + '% бензина'); } resume(); };
   } else if (ev === 'gift') {
     const g = pick(Z.GIFT_FINDS);
     sheet(`<div style="text-align:center"><div style="font-size:56px">🎁</div><h2>Подарок для Әже</h2><p>По дороге ты нашёл ${g}. Әже будет рада!</p><button class="big-btn sun" id="ok">Взять</button></div>`, false);
@@ -521,8 +539,8 @@ function miniEvent() {
     sheet(`<div style="text-align:center"><div style="font-size:56px">🌾</div><h2>Поле с овсом</h2><p>Дай коню жем — силы восстановятся полностью.</p><button class="big-btn sun" id="ok">Дать жем</button></div>`, false);
     $('#ok').onclick = () => { if (T) T.stamina = 100; resume(); };
   } else if (ev === 'fuel') {
-    sheet(`<div style="text-align:center"><div style="font-size:56px">⛽</div><h2>Заправка по пути</h2><p>Топливо +40%.</p><button class="big-btn teal" id="ok">Заправиться</button></div>`, false);
-    $('#ok').onclick = () => { if (T) T.fuel = Math.min(100, T.fuel + 40); resume(); };
+    sheet(`<div style="text-align:center"><div style="font-size:56px">⛽</div><h2>Заправка по пути</h2><p>Бензин +40%.</p><button class="big-btn teal" id="ok">Заправиться</button></div>`, false);
+    $('#ok').onclick = async () => { $('#ok').disabled = true; const n = await refuel('station'); toast(n ? '⛽ Бак +' + n + '%' : 'Заправка уже была совсем недавно'); resume(); };
   }
 }
 
@@ -830,5 +848,6 @@ window.addEventListener('popstate', () => {
   else history.back();
 });
 
+if (LS.get('zhol_test', false)) window.__zhol = () => ({ ME, T });
 boot();
 })();

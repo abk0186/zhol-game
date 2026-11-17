@@ -174,3 +174,8 @@ html{background:#13283d}
 .route .who.opp{top:12px;font-size:20px;opacity:.95;filter:drop-shadow(0 1px 1px rgba(0,0,0,.3))}
 .route .line{height:42px}
 @media(max-width:899px){#tab-map:not(.hidden){display:flex;flex-direction:column}#tab-map .panel{order:-1;margin:0 0 12px}}
+.meter.low i{background:linear-gradient(90deg,#d9534f,#f0b43b)}
+.empty{background:rgba(255,255,255,.08);border:2px dashed rgba(255,255,255,.35);border-radius:22px;padding:14px;text-align:center}
+.empty .et{font-size:24px;font-weight:800;margin-bottom:4px}
+.empty .muted{color:rgba(255,255,255,.75);margin:6px 0}
+.empty .stepbtn{height:140px;margin:6px 0}
