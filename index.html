@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#13283d">
+<title>Жол: дорога к Ата и Әже</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏡</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css?v=1">
+</head>
+<body>
+<div id="net" class="net hidden">Нет сети — прогресс сохраняется на устройстве</div>
+
+<!-- ВХОД -->
+<section id="login" class="screen">
+  <div class="hero">
+    <div class="orn"></div>
+    <h1>Жол <span>дорога к Ата и Әже</span></h1>
+    <p class="lead">Сәлем! Выбери себя — и в путь. Вся семья едет в Кордай вместе.</p>
+  </div>
+  <div id="kids" class="kids"></div>
+  <button class="link" id="toParent">👨‍👩‍👧 Родителям (PIN)</button>
+</section>
+
+<!-- ИГРА -->
+<section id="app" class="screen hidden">
+  <header class="top">
+    <div class="me" id="meChip"></div>
+    <div class="chips">
+      <span class="chip" title="Жетоны"><b id="tok">0</b> 🪙</span>
+      <span class="chip" title="Билеты на самолёт"><b id="tix">0</b> 🎫</span>
+      <button class="chip btn-ghost" id="logout" title="Выйти">⇦</button>
+    </div>
+  </header>
+  <nav class="tabs" id="tabs">
+    <button data-tab="map" class="on">🗺️<span>Карта</span></button>
+    <button data-tab="family">👨‍👩‍👧‍👦<span>Семья</span></button>
+    <button data-tab="ach">🏅<span>Награды</span></button>
+    <button data-tab="bank">🪙<span>Банк</span></button>
+  </nav>
+  <main>
+    <div class="tab" id="tab-map">
+      <div class="mapwrap"><svg id="map" viewBox="0 0 400 560" aria-label="Карта"></svg></div>
+      <div class="panel" id="mapPanel"></div>
+    </div>
+    <div class="tab hidden" id="tab-family"></div>
+    <div class="tab hidden" id="tab-ach"></div>
+    <div class="tab hidden" id="tab-bank"></div>
+  </main>
+</section>
+
+<!-- ПОЕЗДКА -->
+<section id="trip" class="screen hidden">
+  <div class="trip-top">
+    <button class="btn-ghost" id="tripExit">⏸ Пауза</button>
+    <div class="trip-title" id="tripTitle"></div>
+    <div class="chip"><b id="tripTok">0</b> 🪙</div>
+  </div>
+  <div class="route" id="route"></div>
+  <div class="trip-stats" id="tripStats"></div>
+  <div class="engine" id="engine"></div>
+  <div class="toast" id="toast"></div>
+</section>
+
+<!-- РОДИТЕЛИ -->
+<section id="admin" class="screen hidden">
+  <header class="top"><div class="me"><b>Режим родителей</b></div><button class="chip btn-ghost" id="adminExit">✕ Выйти</button></header>
+  <main id="adminMain" class="admin"></main>
+</section>
+
+<div id="modal" class="modal hidden"><div class="sheet" id="sheet"></div></div>
+
+<script src="data.js?v=1"></script>
+<script src="app.js?v=1"></script>
+</body>
+</html>
