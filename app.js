@@ -515,7 +515,7 @@ $('#toFamily').onclick = async () => {
   let fams = [];
   try { fams = await rpc('zhol_families'); } catch (e) { return toast('Нет сети'); }
   sheet(`<h2>👪 Вход для родителей</h2><div class="muted">Выберите свою семью. Здесь можно только смотреть прогресс детей.</div>` +
-    fams.map(f => `<button class="opt" data-fam="${f.id}"><span class="i">🏡</span><span><b>${esc(f.name)}</b><small>${f.kids.map(k => k.avatar + ' ' + esc(k.name)).join(', ')}</small></span></button>`).join('') +
+    fams.map(f => `<button class="opt" data-fam="${f.id}"><span class="i">${f.all ? '👨‍👩‍👧‍👦' : '🏡'}</span><span><b>${esc(f.name)}</b><small>${f.all ? 'все 8: ' + f.kids.map(k => k.avatar).join(' ') : f.kids.map(k => k.avatar + ' ' + esc(k.name)).join(', ')}</small></span></button>`).join('') +
     `<button class="btn" style="width:100%;margin-top:12px" onclick="document.getElementById('modal').click()">Отмена</button>`);
   $('#sheet').querySelectorAll('[data-fam]').forEach(b => b.onclick = () => {
     const f = fams.find(x => x.id === b.dataset.fam);
@@ -556,7 +556,7 @@ function renderFamilyView(r) {
   FAMDATA = r; LS.set('zhol_famdata', r); PUB = r.pub; LS.set('zhol_pub', r.pub);
   const N = nodes(), P = id => PUB.players.find(p => p.id === id) || { avatar: '?', name: id };
   $('#famName').textContent = r.family.name;
-  let h = `<div class="fam-kids">` + r.kids.map(k => {
+  const kidCard = k => {
     const trips = r.activity.filter(a => a.player === k.id && a.kind === 'arrive').slice(0, 3);
     const pct = k.trip ? Math.min(100, 100 * k.trip.done / k.trip.total) : null;
     return `<div class="card kidcard"><div class="row" style="border:0;padding-top:0"><div class="av" style="background:${k.color};width:48px;height:48px;font-size:28px">${k.avatar}</div><div class="grow"><b style="font-size:18px">${esc(k.name)}</b><small>${k.age} лет · ${esc(k.school)} · ${Z.LEAGUES[k.league].name}</small></div><div class="chip" style="background:#fff1cf;color:#3a2400"><b>${k.tokens}</b> 🪙</div></div>
@@ -566,14 +566,18 @@ function renderFamilyView(r) {
       <div class="kblock"><b>🎁 Сувениры:</b> ${k.delivered.length ? 'доставлено Әже — ' + k.delivered.map(g => esc(N[g]?.souvenir)).join(', ') : 'пока не доставлено'}${k.gifts.length ? '; в сумке — ' + k.gifts.map(g => esc(N[g]?.souvenir)).join(', ') : ''}</div>
       <div class="kblock"><b>🏅 Достижения (${k.achievements.length}/${Object.keys(Z.ACH).length}):</b> ${k.achievements.length ? k.achievements.map(a => `<span class="tag" title="${esc(Z.ACH[a]?.d)}">${Z.ACH[a]?.i} ${esc(Z.ACH[a]?.t || a)}</span>`).join(' ') : 'пока нет'}</div>
       <div class="kblock"><b>🛣️ Последние поездки:</b> ${trips.length ? trips.map(a => `<div class="muted">${fdt(a.at)} — ${esc(nname(a.data.from))} → ${esc(nname(a.data.to))} ${Z.TRANSPORT[a.data.transport]?.icon || ''} ${fmt(a.data.km)} км</div>`).join('') : '<span class="muted">пока нет завершённых</span>'}</div></div>`;
-  }).join('') + `</div>`;
+  };
+  let h = '';
+  if (r.family.all) for (const fm of r.families || []) { const ks = r.kids.filter(k => k.family === fm.id); if (ks.length) h += `<h2 class="famhead">🏡 ${esc(fm.name)}</h2>` + ks.map(kidCard).join(''); }
+  else h = r.kids.map(kidCard).join('');
+  h = `<div class="fam-kids">${h}</div>`;
   const f = PUB.family, goal = weekGoal(), wk = +f.week_km;
   h += `<div class="fam-all"><div class="card"><h3>🏁 Вся семья</h3><div class="muted">Цель недели — все 8 детей доезжают из дома до Ата и Әже (${fmt(goal)} км).</div><div class="bar"><i style="width:${Math.min(100, 100 * wk / goal)}%"></i></div>
       <div class="stats"><div class="stat"><b>${fmt(wk)}</b><small>км за неделю</small></div><div class="stat"><b>${Math.round(100 * wk / goal)}%</b><small>цели недели</small></div><div class="stat"><b>${fmt(f.total_km)}</b><small>км всего</small></div></div></div>
     <div class="card"><h3>🗺️ Кто где и куда едет</h3><div class="mapwrap"><svg id="pmap" viewBox="0 0 400 560"></svg></div>
       ${PUB.players.map(p => `<div class="row"><div class="av" style="background:${p.color}33">${p.avatar}</div><div class="grow"><b>${esc(p.name)}</b><small>${tripLine(p)}</small></div></div>`).join('')}</div>
     <div class="card"><h3>🏆 Рейтинг недели</h3>${[...PUB.players].sort((a, b) => b.week_km - a.week_km || b.km_total - a.km_total).map((p, i) => `<div class="row"><div style="width:22px;font-weight:800">${i + 1}</div><div class="av" style="background:${p.color}33">${p.avatar}</div><div class="grow"><b>${esc(p.name)}</b><small>${Z.LEAGUES[p.league].name} · всего ${fmt(p.km_total)} км</small></div><b>${fmt(p.week_km)} км</b></div>`).join('')}</div>
-    <div class="card"><h3>🕑 Последние события (ваши дети)</h3>${r.activity.length ? r.activity.slice(0, 15).map(a => `<div class="row"><div class="grow">${actLine(a, P)}<small>${fdt(a.at)}</small></div></div>`).join('') : '<div class="muted">Пока событий нет — дети ещё не выезжали.</div>'}</div></div>`;
+    <div class="card"><h3>🕑 Последние события (${r.family.all ? 'все дети' : 'ваши дети'})</h3>${r.activity.length ? r.activity.slice(0, 15).map(a => `<div class="row"><div class="grow">${actLine(a, P)}<small>${fdt(a.at)}</small></div></div>`).join('') : '<div class="muted">Пока событий нет — дети ещё не выезжали.</div>'}</div></div>`;
   $('#parentMain').innerHTML = h;
   renderMap($('#pmap'), null);
 }
