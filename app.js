@@ -24,7 +24,7 @@ async function rpc(fn, args) {
   if (!r.ok) throw new Error('Ошибка сервера ' + r.status);
   return r.json();
 }
-const ERR = { bad_code: 'Неверный код', locked: 'Слишком много попыток. Подожди 5 минут', bad_pin: 'Неверный PIN', no_ticket: 'Нужен билет 🎫', not_enough: 'Не хватает жетонов', too_many: 'Слишком много запросов ждут ответа', already: 'Уже отправлено', bad_path: 'Такой дороги нет', too_fast: 'Слишком быстро — это не засчитано', bad_steps: 'Минимум 100 шагов', bad_format: 'Неверный формат' };
+const ERR = { bad_code: 'Неверный код', locked: 'Слишком много попыток. Подожди 5 минут', bad_pin: 'Неверный PIN', no_ticket: 'Нужен билет 🎫', not_enough: 'Не хватает жетонов', too_many: 'Слишком много запросов ждут ответа', already: 'Уже отправлено', bad_path: 'Такой дороги нет', too_fast: 'Слишком быстро — это не засчитано', bad_steps: 'Минимум 100 шагов', bad_format: 'Неверный формат', on_trip: 'Кто-то из вас уже в пути', not_same_place: 'Вы должны быть в одном месте', has_challenge: 'У кого-то из вас уже есть жарыс', no_challenge: 'Вызов уже не действует', bad_transport: 'Этот транспорт нельзя', no_player: 'Нет такого игрока' };
 const errText = e => ERR[e] || e || 'Что-то пошло не так';
 
 /* ---------- граф ---------- */
@@ -63,7 +63,8 @@ function tripPos(trip, doneOverride) {
 }
 
 /* ---------- модалка, тост ---------- */
-function sheet(html, onClose) { $('#sheet').innerHTML = html; $('#modal').classList.remove('hidden'); $('#modal').onclick = e => { if (e.target.id === 'modal' && onClose !== false) closeSheet(); }; }
+let SHEET_LOCKED = false;
+function sheet(html, onClose) { SHEET_LOCKED = onClose === false; $('#sheet').innerHTML = `<div class="sheet-bar"><button class="home-btn" data-home>🏠 Домой</button>${SHEET_LOCKED ? '' : '<button class="x-btn" data-x>✕</button>'}</div>` + html; $('#sheet').querySelector('[data-home]').onclick = goHome; const xb = $('#sheet').querySelector('[data-x]'); if (xb) xb.onclick = closeSheet; $('#modal').classList.remove('hidden'); $('#modal').onclick = e => { if (e.target.id === 'modal' && onClose !== false) closeSheet(); }; }
 function closeSheet() { $('#modal').classList.add('hidden'); $('#sheet').innerHTML = ''; }
 let toastT; function toast(t, ms = 1800) { const el = $('#toast'); el.textContent = t; el.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('on'), ms); }
 function show(id) { for (const s of ['login', 'app', 'trip', 'admin', 'parent']) $('#' + s).classList.toggle('hidden', s !== id); window.scrollTo(0, 0); }
@@ -84,7 +85,7 @@ function codePad(title, sub, { min = 4, max = 4, onSubmit }) {
 }
 
 /* ---------- вход ---------- */
-async function loadPub() { const s = await rpc('zhol_public_state'); PUB = s; LS.set('zhol_pub', s); return s; }
+async function loadPub() { const s = await rpc('zhol_public_state', LS.get('zhol_test', false) ? { test: true } : {}); PUB = s; LS.set('zhol_pub', s); return s; }
 function renderKids() {
   if (!PUB) { $('#kids').innerHTML = '<div class="muted" style="color:#fff">Загрузка…</div>'; return; }
   $('#kids').innerHTML = PUB.players.map(p => `<button class="kid" data-id="${p.id}"><div class="av" style="background:${p.color}22">${p.avatar}</div><b>${esc(p.name)}</b><small>${p.age} лет · ${esc(p.school)}</small><br><span class="where">${p.trip ? '🛣️ в пути' : '📍 ' + esc(nname(p.location))}</span></button>`).join('');
@@ -129,11 +130,8 @@ function renderApp() {
   $('#tok').textContent = ME.tokens; $('#tix').textContent = ME.tickets;
   renderMap(); renderMapPanel(); renderFamily(); renderAch(); renderBank();
 }
-$('#tabs').querySelectorAll('button').forEach(b => b.onclick = () => {
-  TAB = b.dataset.tab; $('#tabs').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
-  for (const t of ['map', 'family', 'ach', 'bank']) $('#tab-' + t).classList.toggle('hidden', t !== TAB);
-  window.scrollTo(0, 0);
-});
+$('#tabs').querySelectorAll('button').forEach(b => b.onclick = () => setTab(b.dataset.tab));
+$('#homeBtn').onclick = goHome; $('#adminHome').onclick = goHome; $('#famHome').onclick = () => { closeSheet(); window.scrollTo(0, 0); };
 
 /* ---------- карта ---------- */
 function renderMap(svg = $('#map'), focusTrip = ME?.trip, doneOverride) {
@@ -178,7 +176,7 @@ function renderMap(svg = $('#map'), focusTrip = ME?.trip, doneOverride) {
   svg.innerHTML = s;
 }
 function renderMapPanel() {
-  const cfg = PUB.config, t = ME.trip; let h = '';
+  const cfg = PUB.config, t = ME.trip; let h = racePanel();
   if (t) {
     const pct = Math.min(100, 100 * t.done / t.total), T = Z.TRANSPORT[t.transport];
     h += `<h3>${T.icon} В пути: ${esc(nname(t.path[0]))} → ${esc(nname(t.path.at(-1)))}</h3><div class="bar"><i style="width:${pct}%"></i></div><div class="muted">${fmt(t.done)} из ${fmt(t.total)} км · ${T.name}</div>
@@ -193,10 +191,12 @@ function renderMapPanel() {
   $('#mapPanel').innerHTML = h;
   $('#newBtn').onclick = () => openPlan();
   if ($('#contBtn')) $('#contBtn').onclick = () => openTrip();
+  bindRace();
 }
 
 /* ---------- выбор маршрута ---------- */
-function openPlan() {
+function openPlan(force) {
+  if (!force && ME.trip?.challenge && (PUB.challenges || []).some(c => c.id === +ME.trip.challenge && !c.winner)) { if (!confirm('Ты в жарысе! Если сменишь маршрут — засчитается поражение. Точно?')) return; }
   const here = ME.location, homes = {};
   for (const p of PUB.players) if (p.id !== ME.id) (homes[p.home] ||= []).push(p);
   const list = PUB.nodes.filter(n => n.id !== here).map(n => ({ n, r: shortest(here, n.id) })).filter(x => x.r)
@@ -248,6 +248,7 @@ function openTrip() {
   $('#tripTok').textContent = ME.tokens;
   buildEngine(); drawTrip();
   T.timers.push(setInterval(flush, 2500), setInterval(tick, 100));
+  if (trip.challenge) { T.timers.push(setInterval(racePoll, 4000)); racePoll(); }
 }
 function closeTrip(toApp = true) {
   if (!T) return;
@@ -264,7 +265,7 @@ async function flushNow() {
   try { const r = await rpc('zhol_progress', { p: SESSION.id, code: SESSION.code, km: +pend.km.toFixed(3), taps: pend.taps, dur_ms: Math.round(Math.min(pend.dur, 60000)) }); if (r.me) { ME = r.me; LS.del('zhol_pend_' + ME.id); renderApp(); } }
   catch (e) {}
 }
-$('#tripExit').onclick = () => closeTrip(true);
+$('#tripExit').onclick = goHome;
 const localDone = () => Math.min(T.trip.total, T.server + T.inflight + T.pendKm);
 
 function addKm(km, isTap) {
@@ -323,10 +324,12 @@ function arrival(events) {
   if (tr === 'car') setFuel(T.fuel);
   T = null; LS.del('zhol_pend_' + ME.id);
   const del = events.filter(e => e.type === 'delivered'), cities = events.filter(e => e.type === 'new_city');
+  const rw = events.find(e => e.type === 'race_win'), rl = events.find(e => e.type === 'race_lose'), rf = events.find(e => e.type === 'race_forfeit_win');
+  const raceHtml = rw ? `<p style="font-size:20px">🏆 <b>Победа в жарысе!</b> Ты обогнал(а) ${pl(rw.vs).avatar} ${esc(pl(rw.vs).name)}${rw.tokens ? ' · +' + rw.tokens + ' 🪙' : ''}</p>` : rl ? `<p>⚔️ ${pl(rl.winner).avatar} ${esc(pl(rl.winner).name)} финишировал(а) первым. Ты молодец, что доехал(а)!${rl.tokens ? ' +' + rl.tokens + ' 🪙 за участие' : ''}</p>` : rf ? `<p>🏆 Соперник сошёл с дистанции — победа в жарысе за тобой!</p>` : '';
   const host = PUB.players.filter(p => p.home === to && p.id !== ME.id);
   const title = to === 'KOR' ? 'Сәлем, Кордай! 🏡' : `Сәлем, ${nname(to)}!`;
   const text = to === 'KOR' ? 'Ата и Әже очень рады тебе! Чай уже на столе ☕' : host.length ? `Тебя встречают: ${host.map(p => p.avatar + ' ' + esc(p.name)).join(', ')}` : 'Ты доехал! Отличная дорога.';
-  sheet(`<div style="text-align:center"><div style="font-size:64px">${to === 'KOR' ? '👵🏡👴' : '🎉'}</div><h2>${title}</h2><p>${text}</p>
+  sheet(`<div style="text-align:center"><div style="font-size:64px">${to === 'KOR' ? '👵🏡👴' : '🎉'}</div><h2>${title}</h2><p>${text}</p>${raceHtml}
     ${cities.length ? `<p>Новые места: ${cities.map(c => esc(nname(c.node))).join(', ')}</p>` : ''}
     ${del.length ? `<p>🎁 Подарки для Әже доставлены: ${del.map(d => esc(nodes()[d.node]?.souvenir) + ' (+' + d.tokens + ' 🪙)').join(', ')}</p>` : ''}
     <p class="muted">Жетонов теперь: ${ME.tokens} 🪙</p><button class="big-btn teal" id="arrOk">Рахмет! 🙌</button></div>`, false);
@@ -338,9 +341,10 @@ function drawTrip() {
   let cum = 0; const stops = t.path.map((n, i) => { if (i > 0) cum += +t.legs[i - 1]; return { n, at: cum }; });
   const pct = x => (100 * x / total).toFixed(2);
   const next = stops.find(s => s.at > done + 1e-6);
-  $('#route').innerHTML = `<div class="line"><div class="track"></div><div class="fill" style="width:${pct(done)}%"></div>${stops.map(s => `<div class="stop ${s.at <= done ? 'done' : ''}" style="left:${pct(s.at)}%"></div>`).join('')}<div class="who" style="left:${pct(done)}%">${T.TR.icon}</div></div>
+  const RT = raceTripHtml(done, total);
+  $('#route').innerHTML = `<div class="line"><div class="track"></div><div class="fill" style="width:${pct(done)}%"></div>${stops.map(s => `<div class="stop ${s.at <= done ? 'done' : ''}" style="left:${pct(s.at)}%"></div>`).join('')}<div class="who" style="left:${pct(done)}%">${T.TR.icon}</div>${RT.marker}</div>
     <div class="names">${stops.length <= 5 ? stops.map(s => `<span>${esc(nname(s.n))}</span>`).join('') : `<span>${esc(nname(stops[0].n))}</span><span>…</span><span>${esc(nname(stops.at(-1).n))}</span>`}</div>`;
-  $('#tripStats').innerHTML = `<div><b>${fmt(total - done)}</b><small>км осталось</small></div><div><b>${next ? esc(nname(next.n)) : '🏁'}</b><small>${next ? 'через ' + fmt(next.at - done) + ' км' : 'финиш'}</small></div><div><b>${fmt(ME.today_km + T.pendKm + T.inflight)}</b><small>км сегодня</small></div>`;
+  $('#tripStats').innerHTML = `<div><b>${fmt(total - done)}</b><small>км осталось</small></div><div><b>${next ? esc(nname(next.n)) : '🏁'}</b><small>${next ? 'через ' + fmt(next.at - done) + ' км' : 'финиш'}</small></div>${RT.stat || `<div><b>${fmt(ME.today_km + T.pendKm + T.inflight)}</b><small>км сегодня</small></div>`}`;
   const meter = $('#meter'); if (meter) {
     const v = T.tr === 'car' ? T.fuel : T.stamina;
     meter.querySelector('i').style.width = v + '%'; meter.querySelector('span').textContent = (T.tr === 'car' ? '⛽ Топливо ' : '💪 Силы ') + Math.round(v) + '%';
@@ -388,7 +392,7 @@ function buildEngine() {
   }
   if (T.tr === 'car') {
     const g = $('#gas');
-    const on = v => { T.holding = v; g.classList.toggle('on', v); };
+    const on = v => { if (!T) return; T.holding = v; g.classList.toggle('on', v); };
     g.addEventListener('pointerdown', e => { e.preventDefault(); g.setPointerCapture?.(e.pointerId); on(true); });
     for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) g.addEventListener(ev, () => on(false));
     key('keydown', e => { if (e.code === 'Space') { e.preventDefault(); on(true); } });
@@ -471,6 +475,7 @@ function renderFamily() {
   h += `<div class="card"><h3>👨‍👩‍👧‍👦 Семейные достижения</h3>
     <div class="row"><div class="av">🏡</div><div class="grow"><b>Все 8 у Ата и Әже в один день</b><small>Сегодня в Кордае: ${kt.length}/8 ${kt.map(id => PUB.players.find(p => p.id === id)?.avatar).join(' ')}</small></div>${kt.length >= 8 ? '<span class="tag ok">Есть!</span>' : ''}</div>
     <div class="row"><div class="av">🗺️</div><div class="grow"><b>Круг по всем городам</b><small>Семья побывала в ${f.all_visited.length} из ${all} мест на карте</small></div>${f.all_visited.length >= all ? '<span class="tag ok">Есть!</span>' : ''}</div></div>`;
+  h += raceCard();
   h += `<div class="card"><h3>🏆 Лиги недели (км)</h3><div class="muted">Соревнуются ровесники — так у каждого есть шанс.</div>`;
   for (const lg of ['young', 'mid', 'old']) {
     const ps = PUB.players.filter(p => p.league === lg).sort((a, b) => b.week_km - a.week_km);
@@ -576,6 +581,7 @@ function renderFamilyView(r) {
       <div class="stats"><div class="stat"><b>${fmt(wk)}</b><small>км за неделю</small></div><div class="stat"><b>${Math.round(100 * wk / goal)}%</b><small>цели недели</small></div><div class="stat"><b>${fmt(f.total_km)}</b><small>км всего</small></div></div></div>
     <div class="card"><h3>🗺️ Кто где и куда едет</h3><div class="mapwrap"><svg id="pmap" viewBox="0 0 400 560"></svg></div>
       ${PUB.players.map(p => `<div class="row"><div class="av" style="background:${p.color}33">${p.avatar}</div><div class="grow"><b>${esc(p.name)}</b><small>${tripLine(p)}</small></div></div>`).join('')}</div>
+    ${raceCard(r.family.all ? null : c => r.kids.some(k => k.id === c.challenger || k.id === c.opponent))}
     <div class="card"><h3>🏆 Рейтинг недели</h3>${[...PUB.players].sort((a, b) => b.week_km - a.week_km || b.km_total - a.km_total).map((p, i) => `<div class="row"><div style="width:22px;font-weight:800">${i + 1}</div><div class="av" style="background:${p.color}33">${p.avatar}</div><div class="grow"><b>${esc(p.name)}</b><small>${Z.LEAGUES[p.league].name} · всего ${fmt(p.km_total)} км</small></div><b>${fmt(p.week_km)} км</b></div>`).join('')}</div>
     <div class="card"><h3>🕑 Последние события (${r.family.all ? 'все дети' : 'ваши дети'})</h3>${r.activity.length ? r.activity.slice(0, 15).map(a => `<div class="row"><div class="grow">${actLine(a, P)}<small>${fdt(a.at)}</small></div></div>`).join('') : '<div class="muted">Пока событий нет — дети ещё не выезжали.</div>'}</div></div>`;
   $('#parentMain').innerHTML = h;
@@ -644,5 +650,125 @@ function kidActions(p) {
 
 window.addEventListener('online', () => { setNet(true); if (ME && SESSION) refresh(); });
 window.addEventListener('offline', () => setNet(false));
+/* ---------- жарыс (челлендж) ---------- */
+const RACE_TR = ['walk', 'bike', 'horse', 'car'];
+const pl = id => PUB.players.find(p => p.id === id) || { avatar: '❔', name: id };
+const openCh = id => (PUB.challenges || []).find(c => (c.challenger === id || c.opponent === id) && (c.status === 'pending' || c.status === 'active'));
+function racePct(c, id) {
+  const p = pl(id);
+  if (p.trip && +p.trip.challenge === c.id) return Math.min(100, 100 * p.trip.done / p.trip.total);
+  const arr = id === c.challenger ? c.challenger_arrived_at : c.opponent_arrived_at;
+  return arr ? 100 : null;
+}
+function chLine(c) {
+  const A = pl(c.challenger), B = pl(c.opponent), T = Z.TRANSPORT[c.transport];
+  let st;
+  if (c.status === 'pending') st = 'ждёт ответа';
+  else if (c.status === 'active') st = `${A.avatar} ${Math.round(racePct(c, c.challenger) ?? 0)}% · ${B.avatar} ${Math.round(racePct(c, c.opponent) ?? 0)}%`;
+  else if (c.status === 'finished') st = `🏆 победил(а) ${esc(pl(c.winner).name)}`;
+  else if (c.status === 'cancelled' && c.winner) st = `${esc(pl(c.cancelled_by).name)} сошёл(ла) с дистанции — победа ${esc(pl(c.winner).name)}`;
+  else st = 'отменён';
+  return `<div class="row"><div class="av">⚔️</div><div class="grow"><b>${A.avatar} ${esc(A.name)} vs ${B.avatar} ${esc(B.name)}</b><small>${esc(nname(c.path[0]))} → ${esc(nname(c.path.at(-1)))} · ${T.icon} ${T.name.toLowerCase()} · ${fmt(c.total)} км</small><small>${st}</small></div></div>`;
+}
+function raceCard(list) {
+  const cs = (PUB.challenges || []).filter(list || (() => true));
+  return `<div class="card"><h3>⚔️ Жарыс — вызовы и гонки</h3>${cs.length ? cs.map(chLine).join('') : '<div class="muted">Пока гонок нет. Жарыс можно начать, когда двое детей в одном месте.</div>'}</div>`;
+}
+function racePanel() {
+  const c = openCh(ME.id);
+  if (c && c.status === 'pending' && c.opponent === ME.id) {
+    const A = pl(c.challenger), T = Z.TRANSPORT[c.transport];
+    return `<div class="race-box"><b>⚔️ ${A.avatar} ${esc(A.name)} вызывает тебя на жарыс!</b><div class="muted">${esc(nname(c.path[0]))} → ${esc(nname(c.path.at(-1)))} · ${T.icon} ${T.name} · ${fmt(c.total)} км. Кто первый доедет — +15 🪙.</div>
+      <div class="inline" style="margin-top:8px"><button class="btn p" id="raceYes">Принять ⚔️</button><button class="btn r" id="raceNo">Отказаться</button></div></div>`;
+  }
+  if (c && c.status === 'pending') return `<div class="race-box"><b>⚔️ Ждём ответа от ${pl(c.opponent).avatar} ${esc(pl(c.opponent).name)}</b><div class="muted">${esc(nname(c.path[0]))} → ${esc(nname(c.path.at(-1)))} · ${Z.TRANSPORT[c.transport].icon}. Вызов действует 24 часа.</div><button class="btn" id="raceCancel" style="margin-top:8px">Отменить вызов</button></div>`;
+  if (c && c.status === 'active') { const o = c.challenger === ME.id ? c.opponent : c.challenger; return `<div class="race-box"><b>⚔️ Идёт жарыс с ${pl(o).avatar} ${esc(pl(o).name)}</b><div class="muted">Ты ${Math.round(racePct(c, ME.id) ?? 0)}% · ${esc(pl(o).name)} ${Math.round(racePct(c, o) ?? 0)}%</div></div>`; }
+  if (!ME.trip) return `<button class="big-btn sun" id="raceNew">⚔️ Жарыс — вызвать на гонку</button>`;
+  return '';
+}
+function bindRace() {
+  const c = openCh(ME.id);
+  if ($('#raceYes')) $('#raceYes').onclick = async () => { try { const r = await rpc('zhol_challenge_respond', { p: SESSION.id, code: SESSION.code, id: c.id, accept: true }); if (!r.ok) { toast(errText(r.error)); return refresh(); } ME = r.me; await loadPub().catch(() => {}); renderApp(); openTrip(); } catch (e) { toast('Нет сети'); } };
+  if ($('#raceNo')) $('#raceNo').onclick = () => raceRespond(c.id, false, 'Вызов отклонён');
+  if ($('#raceCancel')) $('#raceCancel').onclick = () => raceRespond(c.id, false, 'Вызов отменён');
+  if ($('#raceNew')) $('#raceNew').onclick = openRace;
+}
+async function raceRespond(id, accept, msg) { try { const r = await rpc('zhol_challenge_respond', { p: SESSION.id, code: SESSION.code, id, accept }); toast(r.ok ? msg : errText(r.error)); refresh(); } catch (e) { toast('Нет сети'); } }
+function openRace() {
+  const here = ME.location;
+  if (openCh(ME.id)) return toast('У тебя уже есть жарыс');
+  const opp = PUB.players.filter(p => p.id !== ME.id && !p.trip && p.location === here && !openCh(p.id));
+  if (!opp.length) {
+    return sheet(`<h2>⚔️ Жарыс</h2><p>Жарыс можно начать только с тем, кто сейчас в том же месте, что и ты (${esc(nname(here))}), и не в пути.</p><div class="muted">Где сейчас все:</div>${PUB.players.filter(p => p.id !== ME.id).map(p => `<div class="row"><div class="av">${p.avatar}</div><div class="grow"><b>${esc(p.name)}</b><small>${p.trip ? 'в пути → ' + esc(nname(p.trip.path.at(-1))) : '📍 ' + esc(nname(p.location))}</small></div></div>`).join('')}`);
+  }
+  sheet(`<h2>⚔️ Кого вызываем?</h2><div class="muted">Здесь (${esc(nname(here))}) сейчас:</div>` + opp.map(p => `<button class="opt" data-opp="${p.id}"><span class="i">${p.avatar}</span><span><b>${esc(p.name)}</b><small>${p.age} лет · ${Z.LEAGUES[p.league].name}</small></span></button>`).join(''));
+  $('#sheet').querySelectorAll('[data-opp]').forEach(b => b.onclick = () => raceDest(b.dataset.opp));
+}
+function raceDest(opp) {
+  const here = ME.location;
+  const list = PUB.nodes.filter(n => n.id !== here).map(n => ({ n, r: shortest(here, n.id) })).filter(x => x.r).sort((a, b) => (b.n.id === 'KOR') - (a.n.id === 'KOR') || a.r.km - b.r.km);
+  sheet(`<h2>⚔️ Куда гонка?</h2><div class="muted">Вы с ${pl(opp).avatar} ${esc(pl(opp).name)} поедете по одной дороге.</div>` + list.map(({ n, r }) => `<button class="opt" data-to="${n.id}"><span class="i">${n.id === 'KOR' ? '🏡' : '🏁'}</span><span><b>${esc(n.name)}</b><small>${fmt(r.km)} км · ${r.path.map(nname).map(esc).join(' → ')}</small></span></button>`).join('') + `<button class="btn" style="width:100%;margin-top:12px" id="raceBack">← Назад</button>`);
+  $('#raceBack').onclick = openRace;
+  $('#sheet').querySelectorAll('[data-to]').forEach(b => b.onclick = () => raceTransport(opp, b.dataset.to));
+}
+function raceTransport(opp, to) {
+  const r = shortest(ME.location, to), O = pl(opp);
+  sheet(`<h2>⚔️ На чём?</h2><div class="muted">Транспорт одинаковый для обоих. Младшим нужно меньше тапов, а скорость в км у всех честная.</div>` + RACE_TR.map(id => {
+    const T = Z.TRANSPORT[id];
+    const est = p => T.perTap ? `${fmt(Math.ceil(r.km / (T.perTap * mult(p.age))))} тапов` : `${Math.ceil(r.km / (T.perSec * mult(p.age)) / 60)} мин`;
+    return `<button class="opt" data-tr="${id}"><span class="i">${T.icon}</span><span><b>${T.name}</b><small>${fmt(r.km)} км · тебе ≈ ${est(ME)}, ${esc(O.name)} ≈ ${est(O)}</small></span></button>`;
+  }).join('') + `<div class="muted" style="margin-top:8px">Победитель: +15 🪙 и «Победа в жарысе». Второй, когда доедет: +3 🪙. Сойдёшь с дистанции — засчитается поражение.</div>`);
+  $('#sheet').querySelectorAll('[data-tr]').forEach(b => b.onclick = async () => {
+    b.disabled = true;
+    try { const res = await rpc('zhol_challenge_create', { p: SESSION.id, code: SESSION.code, opponent: opp, path: r.path, transport: b.dataset.tr }); if (!res.ok) { b.disabled = false; return toast(errText(res.error)); } closeSheet(); toast(`Вызов отправлен ${O.name}! ⚔️`); refresh(); }
+    catch (e) { b.disabled = false; toast('Нет сети'); }
+  });
+}
+async function racePoll() {
+  if (!T || !T.trip.challenge) return;
+  try { await loadPub(); } catch (e) { return; }
+  if (!T || !T.trip.challenge) return;
+  const c = (PUB.challenges || []).find(x => x.id === +T.trip.challenge);
+  if (c && c.winner && c.winner !== ME.id && !T.raceNotified) { T.raceNotified = true; toast(c.status === 'finished' ? `${pl(c.winner).name} финишировал(а) первым! Доезжай — +3 🪙 за участие` : 'Соперник сошёл с дистанции — победа твоя!', 3500); }
+  drawTrip();
+}
+function raceTripHtml(done, total, pct) {
+  if (!T || !T.trip.challenge) return { marker: '', stat: null };
+  const c = (PUB.challenges || []).find(x => x.id === +T.trip.challenge); if (!c) return { marker: '', stat: null };
+  const o = c.challenger === ME.id ? c.opponent : c.challenger, op = racePct(c, o);
+  return { marker: op === null ? '' : `<div class="who opp" style="left:${op.toFixed(2)}%">${pl(o).avatar}</div>`, stat: `<div><b>${op === null ? '—' : Math.round(op) + '%'}</b><small>⚔️ ${esc(pl(o).name)} (ты ${Math.round(100 * done / total)}%)</small></div>` };
+}
+
+/* ---------- навигация: Домой и кнопка «назад» ---------- */
+function setTab(t) {
+  TAB = t; $('#tabs').querySelectorAll('button').forEach(x => x.classList.toggle('on', x.dataset.tab === t));
+  for (const k of ['map', 'family', 'ach', 'bank']) $('#tab-' + k).classList.toggle('hidden', k !== t);
+  window.scrollTo(0, 0);
+}
+const vis = id => !$('#' + id).classList.contains('hidden');
+function goHome() {
+  closeSheet();
+  if (T) { closeTrip(true); setTab('map'); toast('Поездка на паузе — продолжишь с карты'); return; }
+  if (vis('admin')) { PIN = null; ADMIN = null; }
+  if (ME && SESSION) { show('app'); setTab('map'); renderApp(); }
+  else if (FAMDATA && LS.get('zhol_mode', '') === 'family') { show('parent'); }
+  else { show('login'); renderKids(); }
+}
+let lastBack = 0;
+function onBack() {
+  if (!$('#modal').classList.contains('hidden')) { if (SHEET_LOCKED) goHome(); else closeSheet(); return true; }
+  if (vis('trip') || vis('admin')) { goHome(); return true; }
+  if (vis('app') && TAB !== 'map') { setTab('map'); return true; }
+  const now = Date.now();
+  if (now - lastBack < 2500) return false;
+  lastBack = now; toast('Нажмите «назад» ещё раз, чтобы выйти из игры', 2500); return true;
+}
+history.replaceState({ z: 'root' }, '');
+history.pushState({ z: 'guard' }, '');
+window.addEventListener('popstate', () => {
+  if (onBack()) history.pushState({ z: 'guard' }, '');
+  else history.back();
+});
+
 boot();
 })();
