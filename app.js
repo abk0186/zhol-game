@@ -11,6 +11,7 @@ const pick = a => a[Math.floor(Math.random() * a.length)];
 let PUB = LS.get('zhol_pub', null);
 let SESSION = LS.get('zhol_me', null);
 let ME = null, REQS = [], ADMIN = null, PIN = null, TAB = 'map';
+let FAM = LS.get('zhol_fam', null), FAMDATA = null;
 
 /* ---------- сеть ---------- */
 function setNet(ok) { $('#net').classList.toggle('hidden', ok); }
@@ -65,7 +66,7 @@ function tripPos(trip, doneOverride) {
 function sheet(html, onClose) { $('#sheet').innerHTML = html; $('#modal').classList.remove('hidden'); $('#modal').onclick = e => { if (e.target.id === 'modal' && onClose !== false) closeSheet(); }; }
 function closeSheet() { $('#modal').classList.add('hidden'); $('#sheet').innerHTML = ''; }
 let toastT; function toast(t, ms = 1800) { const el = $('#toast'); el.textContent = t; el.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('on'), ms); }
-function show(id) { for (const s of ['login', 'app', 'trip', 'admin']) $('#' + s).classList.toggle('hidden', s !== id); window.scrollTo(0, 0); }
+function show(id) { for (const s of ['login', 'app', 'trip', 'admin', 'parent']) $('#' + s).classList.toggle('hidden', s !== id); window.scrollTo(0, 0); }
 
 /* ---------- PIN / код ---------- */
 function codePad(title, sub, { min = 4, max = 4, onSubmit }) {
@@ -90,13 +91,17 @@ function renderKids() {
   $('#kids').querySelectorAll('.kid').forEach(b => b.onclick = () => {
     const p = PUB.players.find(x => x.id === b.dataset.id);
     codePad(`${p.avatar} Сәлем, ${esc(p.name)}!`, 'Введи свой код из 4 цифр', { onSubmit: async (code, fail) => {
-      try { const r = await rpc('zhol_login', { p: p.id, code }); if (!r.ok) return fail(errText(r.error)); SESSION = { id: p.id, code }; LS.set('zhol_me', SESSION); ME = r.me; REQS = r.requests; closeSheet(); enterApp(); }
+      try { const r = await rpc('zhol_login', { p: p.id, code }); if (!r.ok) return fail(errText(r.error)); SESSION = { id: p.id, code }; LS.set('zhol_mode', 'kid'); LS.set('zhol_me', SESSION); ME = r.me; REQS = r.requests; closeSheet(); enterApp(); }
       catch (e) { fail(e.offline ? 'Нет сети' : e.message); }
     } });
   });
 }
 async function boot() {
   renderKids();
+  if (LS.get('zhol_mode', '') === 'family' && FAM) {
+    try { const r = await rpc('zhol_family_login', { f: FAM.id, code: FAM.code }); if (r.ok) return enterFamily(r); LS.del('zhol_fam'); FAM = null; }
+    catch (e) { const c = LS.get('zhol_famdata', null); if (c) return enterFamily(c); }
+  }
   try { await loadPub(); } catch (e) {}
   renderKids();
   if (SESSION) {
@@ -105,7 +110,7 @@ async function boot() {
   }
   show('login');
 }
-$('#toParent').onclick = () => codePad('Режим родителей', 'Введите PIN (по умолчанию 0000 — смените его)', { min: 4, max: 8, onSubmit: async (pin, fail) => {
+$('#toParent').onclick = () => codePad('Администратор', 'Введите PIN (по умолчанию 0000 — смените его)', { min: 4, max: 8, onSubmit: async (pin, fail) => {
   try { const r = await rpc('zhol_admin', { pin, action: 'overview', payload: {} }); if (!r.ok) return fail(errText(r.error)); PIN = pin; ADMIN = r; closeSheet(); show('admin'); renderAdmin(); }
   catch (e) { fail(e.offline ? 'Нет сети' : e.message); }
 } });
@@ -505,6 +510,74 @@ async function req(kind, payload) {
   catch (e) { toast(e.offline ? 'Нет сети' : e.message); }
 }
 
+/* ---------- вход для родителей (только просмотр) ---------- */
+$('#toFamily').onclick = async () => {
+  let fams = [];
+  try { fams = await rpc('zhol_families'); } catch (e) { return toast('Нет сети'); }
+  sheet(`<h2>👪 Вход для родителей</h2><div class="muted">Выберите свою семью. Здесь можно только смотреть прогресс детей.</div>` +
+    fams.map(f => `<button class="opt" data-fam="${f.id}"><span class="i">🏡</span><span><b>${esc(f.name)}</b><small>${f.kids.map(k => k.avatar + ' ' + esc(k.name)).join(', ')}</small></span></button>`).join('') +
+    `<button class="btn" style="width:100%;margin-top:12px" onclick="document.getElementById('modal').click()">Отмена</button>`);
+  $('#sheet').querySelectorAll('[data-fam]').forEach(b => b.onclick = () => {
+    const f = fams.find(x => x.id === b.dataset.fam);
+    codePad(`🏡 ${esc(f.name)}`, 'Введите код семьи (4–6 цифр) и нажмите OK', { min: 4, max: 6, onSubmit: async (code, fail) => {
+      try { const r = await rpc('zhol_family_login', { f: f.id, code }); if (!r.ok) return fail(errText(r.error === 'bad_code' ? 'bad_fcode' : r.error));
+        FAM = { id: f.id, code }; LS.set('zhol_fam', FAM); LS.set('zhol_mode', 'family'); closeSheet(); enterFamily(r); }
+      catch (e) { fail(e.offline ? 'Нет сети' : e.message); }
+    } });
+  });
+};
+ERR.bad_fcode = 'Неверный код семьи';
+let famPoll;
+function enterFamily(r) {
+  ME = null; show('parent'); renderFamilyView(r);
+  clearInterval(famPoll); famPoll = setInterval(refreshFamily, 60000);
+}
+async function refreshFamily() {
+  if ($('#parent').classList.contains('hidden') || !FAM) return;
+  try { const r = await rpc('zhol_family_login', { f: FAM.id, code: FAM.code }); if (r.ok) renderFamilyView(r); else if (r.error === 'bad_code') { famLogout(); alert('Код семьи изменился — войдите заново'); } } catch (e) {}
+}
+function famLogout() { clearInterval(famPoll); LS.del('zhol_fam'); LS.del('zhol_famdata'); LS.set('zhol_mode', ''); FAM = null; FAMDATA = null; show('login'); loadPub().then(renderKids).catch(() => {}); }
+$('#famExit').onclick = () => { if (confirm('Выйти из семейного просмотра?')) famLogout(); };
+$('#famRefresh').onclick = () => { refreshFamily(); toast('Обновлено'); };
+const fdt = s => new Date(s).toLocaleString('ru-RU', { timeZone: 'Asia/Almaty', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+function tripLine(p) {
+  if (!p.trip) return `📍 ${p.location === 'KOR' ? 'в Кордае, у Ата и Әже 🏡' : 'в ' + esc(nname(p.location))}`;
+  const T = Z.TRANSPORT[p.trip.transport], pct = Math.round(100 * p.trip.done / p.trip.total);
+  return `${T.icon} ${esc(nname(p.trip.path[0]))} → <b>${esc(nname(p.trip.path.at(-1)))}</b> · ${T.name.toLowerCase()} · ${pct}%`;
+}
+function actLine(a, P) {
+  const p = P(a.player), d = a.data || {}, who = `${p.avatar} ${esc(p.name)}`;
+  if (a.kind === 'arrive') return `${who} доехал(а): ${esc(nname(d.from))} → <b>${esc(nname(d.to))}</b> ${Z.TRANSPORT[d.transport]?.icon || ''} · ${fmt(d.km)} км`;
+  if (a.kind === 'start') { const path = d.path || []; return `${who} выехал(а): ${esc(nname(path[0]))} → ${esc(nname(path.at(-1)))} ${Z.TRANSPORT[d.transport]?.icon || ''} · ${fmt(d.total)} км`; }
+  if (a.kind === 'ach') { const A = Z.ACH[d.a]; return `${who} получил(а) достижение ${A ? A.i + ' «' + A.t + '»' : ''}`; }
+  return who;
+}
+function renderFamilyView(r) {
+  FAMDATA = r; LS.set('zhol_famdata', r); PUB = r.pub; LS.set('zhol_pub', r.pub);
+  const N = nodes(), P = id => PUB.players.find(p => p.id === id) || { avatar: '?', name: id };
+  $('#famName').textContent = r.family.name;
+  let h = `<div class="fam-kids">` + r.kids.map(k => {
+    const trips = r.activity.filter(a => a.player === k.id && a.kind === 'arrive').slice(0, 3);
+    const pct = k.trip ? Math.min(100, 100 * k.trip.done / k.trip.total) : null;
+    return `<div class="card kidcard"><div class="row" style="border:0;padding-top:0"><div class="av" style="background:${k.color};width:48px;height:48px;font-size:28px">${k.avatar}</div><div class="grow"><b style="font-size:18px">${esc(k.name)}</b><small>${k.age} лет · ${esc(k.school)} · ${Z.LEAGUES[k.league].name}</small></div><div class="chip" style="background:#fff1cf;color:#3a2400"><b>${k.tokens}</b> 🪙</div></div>
+      <div class="kstatus">${tripLine(k)}</div>${pct !== null ? `<div class="bar"><i style="width:${pct}%"></i></div><div class="muted">${fmt(k.trip.done)} из ${fmt(k.trip.total)} км</div>` : ''}
+      <div class="stats"><div class="stat"><b>${fmt(k.today_km)}</b><small>км сегодня</small></div><div class="stat"><b>${fmt(k.week_km)}</b><small>км за неделю</small></div><div class="stat"><b>${fmt(k.km_total)}</b><small>км всего</small></div></div>
+      <div class="kblock"><b>🗺️ Города (${k.visited.length}):</b> ${k.visited.map(v => esc(N[v]?.name || v)).join(', ')}</div>
+      <div class="kblock"><b>🎁 Сувениры:</b> ${k.delivered.length ? 'доставлено Әже — ' + k.delivered.map(g => esc(N[g]?.souvenir)).join(', ') : 'пока не доставлено'}${k.gifts.length ? '; в сумке — ' + k.gifts.map(g => esc(N[g]?.souvenir)).join(', ') : ''}</div>
+      <div class="kblock"><b>🏅 Достижения (${k.achievements.length}/${Object.keys(Z.ACH).length}):</b> ${k.achievements.length ? k.achievements.map(a => `<span class="tag" title="${esc(Z.ACH[a]?.d)}">${Z.ACH[a]?.i} ${esc(Z.ACH[a]?.t || a)}</span>`).join(' ') : 'пока нет'}</div>
+      <div class="kblock"><b>🛣️ Последние поездки:</b> ${trips.length ? trips.map(a => `<div class="muted">${fdt(a.at)} — ${esc(nname(a.data.from))} → ${esc(nname(a.data.to))} ${Z.TRANSPORT[a.data.transport]?.icon || ''} ${fmt(a.data.km)} км</div>`).join('') : '<span class="muted">пока нет завершённых</span>'}</div></div>`;
+  }).join('') + `</div>`;
+  const f = PUB.family, goal = weekGoal(), wk = +f.week_km;
+  h += `<div class="fam-all"><div class="card"><h3>🏁 Вся семья</h3><div class="muted">Цель недели — все 8 детей доезжают из дома до Ата и Әже (${fmt(goal)} км).</div><div class="bar"><i style="width:${Math.min(100, 100 * wk / goal)}%"></i></div>
+      <div class="stats"><div class="stat"><b>${fmt(wk)}</b><small>км за неделю</small></div><div class="stat"><b>${Math.round(100 * wk / goal)}%</b><small>цели недели</small></div><div class="stat"><b>${fmt(f.total_km)}</b><small>км всего</small></div></div></div>
+    <div class="card"><h3>🗺️ Кто где и куда едет</h3><div class="mapwrap"><svg id="pmap" viewBox="0 0 400 560"></svg></div>
+      ${PUB.players.map(p => `<div class="row"><div class="av" style="background:${p.color}33">${p.avatar}</div><div class="grow"><b>${esc(p.name)}</b><small>${tripLine(p)}</small></div></div>`).join('')}</div>
+    <div class="card"><h3>🏆 Рейтинг недели</h3>${[...PUB.players].sort((a, b) => b.week_km - a.week_km || b.km_total - a.km_total).map((p, i) => `<div class="row"><div style="width:22px;font-weight:800">${i + 1}</div><div class="av" style="background:${p.color}33">${p.avatar}</div><div class="grow"><b>${esc(p.name)}</b><small>${Z.LEAGUES[p.league].name} · всего ${fmt(p.km_total)} км</small></div><b>${fmt(p.week_km)} км</b></div>`).join('')}</div>
+    <div class="card"><h3>🕑 Последние события (ваши дети)</h3>${r.activity.length ? r.activity.slice(0, 15).map(a => `<div class="row"><div class="grow">${actLine(a, P)}<small>${fdt(a.at)}</small></div></div>`).join('') : '<div class="muted">Пока событий нет — дети ещё не выезжали.</div>'}</div></div>`;
+  $('#parentMain').innerHTML = h;
+  renderMap($('#pmap'), null);
+}
+
 /* ---------- родители ---------- */
 async function adm(action, payload = {}) {
   try { const r = await rpc('zhol_admin', { pin: PIN, action, payload }); if (!r.ok) { alert(errText(r.error)); if (r.error === 'bad_pin' || r.error === 'locked') { show('login'); } return false; } ADMIN = r; renderAdmin(); return true; }
@@ -530,10 +603,12 @@ function renderAdmin() {
     <button class="btn" id="catAdd" style="margin-top:8px">+ Добавить</button> <button class="btn p" id="catSave">Сохранить каталог</button></div>`;
   h += `<div class="card"><h3>📜 Бонусные задания</h3><label>Задание</label><input id="qT" placeholder="например: прочитать 20 страниц и рассказать Әже по телефону"><div class="inline" style="margin-top:8px"><input id="qR" type="number" value="15" min="1" style="max-width:90px"> 🪙 <select id="qP" style="flex:1"><option value="">Всем</option>${A.players.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select><button class="btn p" id="qAdd">Дать</button></div>
     ${A.quests.map(q => `<div class="row"><div class="grow"><b>${esc(q.title)}</b><small>+${q.reward} 🪙 · ${q.player ? esc(P(q.player).name) : 'всем'}</small></div><button class="btn" data-endq="${q.id}">Завершить</button></div>`).join('')}</div>`;
-  h += `<div class="card"><h3>🔐 PIN родителей</h3><div class="inline"><input id="newPin" type="password" inputmode="numeric" placeholder="новый PIN, 4–8 цифр"><button class="btn p" id="pinSave">Сменить</button></div></div>`;
+  h += `<div class="card"><h3>👪 Коды семей (просмотр)</h3><div class="muted">Родители входят через «Вход для родителей» и видят прогресс без права что-то менять.</div>${(A.families || []).map(f => `<label>${esc(f.name)}${f.locked ? ' 🔒' : ''}</label><div class="inline"><input type="password" inputmode="numeric" maxlength="6" placeholder="новый код, 4–6 цифр" data-fcode="${f.id}"><button class="btn p" data-fsave="${f.id}">Сменить</button></div>`).join('')}</div>`;
+  h += `<div class="card"><h3>🔐 PIN администратора</h3><div class="inline"><input id="newPin" type="password" inputmode="numeric" placeholder="новый PIN, 4–8 цифр"><button class="btn p" id="pinSave">Сменить</button></div></div>`;
   h += `<div class="card"><h3>🛡️ Защита от накрутки</h3><div class="muted">Сервер не засчитывает больше 12 тапов в секунду, ограничивает скорость каждого транспорта и дневные лимиты. Последние срабатывания:</div>${A.suspicious.length ? A.suspicious.map(s => `<div class="row"><div class="grow"><b>${esc(P(s.player).name)}: ${s.kind === 'too_fast' ? 'слишком частые тапы' : 'урезано по скорости'}</b><small>${new Date(s.at).toLocaleString('ru-RU')}</small></div></div>`).join('') : '<div class="muted">Пусто 👍</div>'}</div>`;
   $('#adminMain').innerHTML = h;
   $('#cPreset').value = cfg.rate_preset || '10';
+  $('#adminMain').querySelectorAll('[data-fsave]').forEach(b => b.onclick = async () => { const id = b.dataset.fsave, v = $('#adminMain').querySelector('[data-fcode="' + id + '"]').value; if (!/^\d{4,6}$/.test(v)) return alert('Код — от 4 до 6 цифр'); if (await adm('set_family_code', { family: id, code: v })) alert('Код семьи изменён'); });
   $('#adminMain').querySelectorAll('[data-dec]').forEach(b => b.onclick = () => adm('decide', { id: +b.dataset.dec, status: b.dataset.s, note: b.dataset.s === 'rejected' ? (prompt('Комментарий ребёнку (необязательно)') || '') : '' }));
   $('#adminMain').querySelectorAll('[data-endq]').forEach(b => b.onclick = () => adm('end_quest', { id: +b.dataset.endq }));
   $('#adminMain').querySelectorAll('[data-act]').forEach(b => b.onclick = () => kidActions(P(b.dataset.act)));

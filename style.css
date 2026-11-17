@@ -155,3 +155,11 @@ html{background:#13283d}
 .catrow .ct{flex:1 1 170px;min-width:150px}
 .catrow .cc{max-width:84px;flex:none}
 .catrow label{display:flex;align-items:center;gap:4px;white-space:nowrap}
+.fam-btn{max-width:420px;margin:26px auto 0}
+#login .link{margin-top:16px}
+.kidcard .kblock{margin-top:10px;font-size:14px;line-height:1.45}
+.kidcard .kblock .tag{margin:2px 2px 0 0}
+.kstatus{font-size:15px;margin:4px 0 2px}
+.fam .card{margin-top:12px}
+@media(min-width:900px){.fam{display:grid;grid-template-columns:1fr 1fr;gap:0 16px;align-items:start;padding-bottom:30px}}
+#parent main{padding-bottom:30px}
