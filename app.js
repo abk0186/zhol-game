@@ -29,6 +29,7 @@ const errText = e => ERR[e] || e || 'Что-то пошло не так';
 
 /* ---------- граф ---------- */
 const nodes = () => Object.fromEntries((PUB?.nodes || []).map(n => [n.id, n]));
+if (window.PUB_FILTER !== false) { const _f = s => { if (s && s.nodes) { s.nodes = s.nodes.filter(n => !n.region && Z.XY[n.id]); const ok = new Set(s.nodes.map(n => n.id)); s.edges = (s.edges || []).filter(e => ok.has(e.a) && ok.has(e.b)); } return s; }; window.__zf = _f; }
 const nname = id => nodes()[id]?.name || id;
 function adj(mode) {
   const g = {};
@@ -117,7 +118,7 @@ function codePad(title, sub, { min = 4, max = 4, onSubmit }) {
 }
 
 /* ---------- вход ---------- */
-async function loadPub() { const s = await rpc('zhol_public_state', LS.get('zhol_test', false) ? { test: true } : {}); PUB = s; LS.set('zhol_pub', s); return s; }
+async function loadPub() { const s = await rpc('zhol_public_state', LS.get('zhol_test', false) ? { test: true } : {}); PUB = window.__zf ? window.__zf(s) : s; LS.set('zhol_pub', s); return s; }
 function renderKids() {
   if (!PUB) { $('#kids').innerHTML = '<div class="muted" style="color:#fff">Загрузка…</div>'; return; }
   $('#kids').innerHTML = PUB.players.map(p => `<button class="kid" data-id="${p.id}"><div class="av" style="background:${p.color}22">${p.avatar}</div><b>${esc(p.name)}</b><small>${p.age} лет · ${esc(p.school)}</small><br><span class="where">${p.trip ? '🛣️ в пути' : '📍 ' + esc(nname(p.location))}</span></button>`).join('');
@@ -648,7 +649,7 @@ function actLine(a, P) {
   return who;
 }
 function renderFamilyView(r) {
-  FAMDATA = r; LS.set('zhol_famdata', r); PUB = r.pub; LS.set('zhol_pub', r.pub);
+  FAMDATA = r; LS.set('zhol_famdata', r); PUB = window.__zf ? window.__zf(r.pub) : r.pub; LS.set('zhol_pub', r.pub);
   const N = nodes(), P = id => PUB.players.find(p => p.id === id) || { avatar: '?', name: id };
   $('#famName').textContent = r.family.name;
   const kidCard = k => {
