@@ -104,6 +104,13 @@ function look(core) {
 }
 const PRE = /^[\s\u00a0]*(?:[^\p{L}\p{N}«"(\[{@+\-−–—]+[\s\u00a0]*)?/u, POST = /[\s\u00a0]*(?:[^\p{L}\p{N}»")\]}.!?…%]+)?[\s\u00a0]*$/u;
 const NOTR = s => { const [t] = templ(s); return /^[\s\p{P}\p{S}]*\{[pcq]0\}[\s\p{P}\p{S}]*$/u.test(t); };
+// делим по разделителю, но не внутри (скобок) и «кавычек»
+function splitSmart(s, sep) {
+  const raw = s.split(sep), out = [];
+  const open = x => (x.split('(').length - x.split(')').length) + (x.split('«').length - x.split('»').length);
+  for (const p of raw) { if (out.length && open(out[out.length - 1]) > 0) out[out.length - 1] += sep + p; else out.push(p); }
+  return out;
+}
 function trCore(s, depth) {
   if (!L.test(s)) return s;
   let r = look(s); if (r != null) return r;
@@ -115,14 +122,14 @@ function trCore(s, depth) {
   let best = null, bestOk = 0, bestBad = [];
   for (const sep of ['. ', '? ', '! ', '; ', ' · ', ' — ', ': ', ' (', ', ']) {
     if (!s.includes(sep)) continue;
-    const parts = s.split(sep); let ok = 0, bad = 0, out; const badP = [];
+    const parts = splitSmart(s, sep); if (parts.length < 2) continue; let ok = 0, bad = 0, out; const badP = [];
     const one = pp => { const x = trAny(pp, depth + 1, true); if (x !== pp) ok++; else if (L.test(pp) && /[А-Яа-яЁё]/.test(pp) && !(LANG === 'kk' && /[әғқңөұүһіӘҒҚҢӨҰҮҺІ]/.test(pp)) && !NOTR(pp)) { bad++; badP.push(pp); } return x; };
     if ('.?!'.includes(sep[0])) out = parts.map((p, i) => one(i < parts.length - 1 ? p + sep[0] : p)).join(' ');
     else out = parts.map((p, i) => { const pp = sep === ' (' && i > 0 ? '(' + p : p; const x = one(pp); return sep === ' (' && i > 0 ? x.replace(/^\(/, '') : x; }).join(sep);
     if (ok && !bad) return out;
     if (ok > bestOk) { best = out; bestOk = ok; bestBad = badP; }
   }
-  if (best != null) bestBad.forEach(p => MISS.add(templ(p.trim())[0]));
+  if (best != null && depth === 0) bestBad.forEach(p => MISS.add(templ(p.trim())[0]));
   return best;
 }
 function trAny(s, depth = 0, quiet) {
