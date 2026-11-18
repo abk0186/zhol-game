@@ -296,3 +296,31 @@ body.chat-on{overflow:hidden}
 .rqbar{display:flex;flex-wrap:wrap;gap:2px;margin-top:6px;background:#fffdf8;border-radius:99px;padding:3px;box-shadow:0 2px 8px rgba(0,0,0,.12)}
 .rqbar button{font-size:21px;width:36px;height:36px;border-radius:50%;background:none}
 .rqbar button.on{background:#cdeedb}
+
+/* v18: языки, справки о городах, шаги */
+.langsw{display:inline-flex;gap:4px;background:rgba(255,255,255,.14);border-radius:999px;padding:4px;margin:10px 0 0}
+.card .langsw{background:#eef3f7}
+.langsw button{border:0;background:transparent;color:inherit;font:600 14px Montserrat,sans-serif;padding:7px 12px;border-radius:999px;cursor:pointer}
+.langsw button.on{background:#f5a524;color:#13283d}
+.langbar{padding:6px 14px 0;text-align:right}
+.langbar .langsw{background:#eef3f7;color:#13283d;margin:0}
+.citycard h2{margin:0 0 2px}
+.citycard h3{margin:14px 0 6px;font-size:16px}
+.citycard p{line-height:1.5;margin:0}
+.citycard ul{margin:0;padding-left:20px;line-height:1.5}
+.cstats{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-top:12px}
+.cstats>div{background:#f3f7fa;border-radius:12px;padding:8px 10px;display:flex;flex-direction:column}
+.cstats small{color:#6b7c8c;font-size:11px}
+.cstats b{font-size:16px}
+.funfact{margin-top:12px;background:#fff6e0;border-radius:12px;padding:10px 12px;line-height:1.45}
+.citycard .src{margin-top:12px;font-size:11px;color:#7d8b98}
+.citycard .src a{color:#2a7ab0}
+.teaser{background:#f3f7fa;border-radius:12px;padding:10px 12px;margin-bottom:12px;line-height:1.45}
+.citygrid{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.citybtn{border:1px solid #dbe4ec;background:#fff;border-radius:999px;padding:6px 10px;font:600 13px Montserrat,sans-serif;cursor:pointer;color:#13283d}
+.citybtn.on{background:#e7f7ef;border-color:#9bd8b8}
+.citybtn.lk{opacity:.55}
+.stepbal{display:flex;align-items:baseline;gap:8px;margin:4px 0 8px}
+.stepbal b{font-size:26px}
+.stepbal small{color:#6b7c8c}
+.capnote.bonus{background:#e7f7ef;color:#155c3b}

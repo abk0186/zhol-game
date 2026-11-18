@@ -4,7 +4,10 @@ const Z = window.ZHOL;
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const LS = { get(k, d) { try { const v = JSON.parse(localStorage.getItem(k)); return v ?? d; } catch { return d; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }, del(k) { localStorage.removeItem(k); } };
-const fmt = n => Number(n || 0).toLocaleString('ru-RU', { maximumFractionDigits: 1 });
+const LOC = () => window.I18N ? I18N.locale() : 'ru-RU';
+const LG = () => window.I18N ? I18N.lang : 'ru';
+const t3 = (ru, kk, en) => LG() === 'kk' ? kk : LG() === 'en' ? en : ru;
+const fmt = n => Number(n || 0).toLocaleString(LG() === 'en' ? 'en-GB' : 'ru-RU', { maximumFractionDigits: 1 });
 const rnd = (a, b) => a + Math.random() * (b - a);
 const pick = a => a[Math.floor(Math.random() * a.length)];
 
@@ -128,7 +131,8 @@ function codePad(title, sub, { min = 4, max = 4, onSubmit }) {
 
 /* ---------- вход ---------- */
 const isTest = id => String(id || '').startsWith('ztest');
-async function loadPub() { const s = await rpc('zhol_public_state', LS.get('zhol_test', false) ? { test: true } : {}); PUB = s; LS.set('zhol_pub', s); return s; }
+async function loadPub() { const s = await rpc('zhol_public_state', LS.get('zhol_test', false) ? { test: true } : {}); PUB = s; LS.set('zhol_pub', s); setNames18(); return s; }
+function setNames18() { try { const a = (PUB?.players || []).map(p => p.name); if (FAMDATA?.kids) a.push(...FAMDATA.kids.map(k => k.name)); if (ME) a.push(ME.name); window.I18N && I18N.setNames(a); } catch (e) {} }
 function renderKids() {
   if (!PUB) { $('#kids').innerHTML = '<div class="muted" style="color:#fff">Загрузка…</div>'; return; }
   $('#kids').innerHTML = PUB.players.filter(p => !isTest(p.id)).map(p => `<button class="kid" data-id="${p.id}"><div class="av" style="background:${p.color}22">${p.avatar}</div><b>${esc(p.name)}</b><small>${p.age} лет · ${esc(p.school)}</small><br><span class="where">${p.trip ? '🛣️ в пути' : '📍 ' + esc(nname(p.location))}</span></button>`).join('');
@@ -162,7 +166,7 @@ $('#logout').onclick = () => { if (!confirm('Выйти? На этом устр�
 
 /* ---------- приложение ---------- */
 let pollT;
-function enterApp() { show('app'); renderApp(); setTimeout(() => chatTick(), 300); clearInterval(pollT); pollT = setInterval(() => { if (!$('#app').classList.contains('hidden')) refresh(); }, 30000); }
+function enterApp() { uiLangSync(); show('app'); renderApp(); setTimeout(() => chatTick(), 300); clearInterval(pollT); pollT = setInterval(() => { if (!$('#app').classList.contains('hidden')) refresh(); }, 30000); }
 async function refresh() {
   try { await loadPub(); const r = await rpc('zhol_login', { p: SESSION.id, code: SESSION.code }); if (r.ok) { ME = r.me; REQS = r.requests; } } catch (e) {}
   renderApp();
@@ -250,16 +254,13 @@ function mapZoomInit() {
   }
 }
 function nodeTap(id) {
-  if (!ME) return;
-  if (!isOpen(id)) return openLocked(regOf(id));
-  const n = nodes()[id];
-  if (id === ME.location && !ME.trip) return toast('📍 Ты здесь: ' + n.name);
-  if (ME.trip) return toast(`${n.name}${n.souvenir ? ' · сувенир: ' + n.souvenir : ''}`, 2500);
-  if (shortest(ME.location, id)) openTransport(id); else toast('Сюда пока не доехать по открытым дорогам');
+  if (!ME) { if (CINFO(id)) sheet(cityCardHtml(id)); return; }
+  if (!isOpen(id)) return openLocked(regOf(id), id);
+  cityCard(id);
 }
-function openLocked(rid) {
+function openLocked(rid, cid) {
   const R = regInfo(rid), need = +R.need || 0, have = +ME?.stars || 0, left = Math.max(0, need - have);
-  sheet(`<h2>🔒 ${R.e || ''} ${esc(R.n)}</h2><div class="muted">Города края: ${regCities(rid).map(n => '<b>' + esc(n.name) + '</b>').join(', ')}</div>
+  sheet(`${cid ? cityTeaser(cid) : ''}<h2>🔒 ${R.e || ''} ${esc(R.n)}</h2><div class="muted">Города края: ${regCities(rid).map(n => '<b>' + esc(n.name) + '</b>').join(', ')}</div>
     <div class="lockbox"><div style="font-size:30px">⭐ ${have} / ${need}</div><div class="bar"><i style="width:${Math.min(100, need ? 100 * have / need : 100)}%"></i></div><div class="muted">${left ? `Нужно ещё <b>${left} ⭐</b> добрых дел. Звёзды дают хорошие оценки, прочитанные книги, помощь дома и добрые дела для людей — после подтверждения родителей.` : 'Звёзд хватает — край откроется после ближайшего подтверждения.'}</div></div>
     <button class="big-btn" id="toDeeds">⭐ Отметить доброе дело</button>`);
   $('#toDeeds').onclick = () => { closeSheet(); setTab('deeds'); };
@@ -274,7 +275,8 @@ function renderMapPanel() {
   } else {
     h += `<h3>📍 Ты в: ${esc(nname(ME.location))}${ME.location === 'KOR' ? ' — у Ата и Әже 🏡' : ''}</h3><div class="muted">Куда поедем? К Ата и Әже в Кордай или в гости к брату/сестре.</div><button class="big-btn" id="newBtn">В путь! 🛣️</button>`;
   }
-  h += `<div class="stats"><div class="stat"><b>${fmt(ME.today_km)}</b><small>км сегодня</small></div><div class="stat"><b>${ME.today_tokens}/${cfg.daily_token_cap}</b><small>🪙 за день</small></div><div class="stat"><b>${fmt(ME.km_total)}</b><small>км всего</small></div></div>`;
+  h += `<div class="stats"><div class="stat"><b>${fmt(ME.today_km)}</b><small>км сегодня</small></div><div class="stat"><b>${ME.today_tokens}/${cfg.daily_token_cap}</b><small>🪙 за день</small></div><div class="stat"><b>${fmt(ME.km_total)}</b><small>км всего</small></div><div class="stat"><b>${fmt(ME.bonus_km || 0)}</b><small>🚶 бонус км</small></div></div>`;
+  if (+ME.today_km >= capKm() && +ME.bonus_km > 0) h += bonusNote(+ME.bonus_km);
   h += `<div class="muted" style="margin-top:10px">🎫 Билет на самолёт — за каждые ${cfg.ticket_every_km} км по земле (осталось ${fmt(cfg.ticket_every_km - ME.ticket_km)} км). 🎁 В сумке: ${ME.gifts.length ? ME.gifts.map(g => esc(nodes()[g]?.souvenir)).join(', ') : 'пусто'}.</div>`;
   const kt = PUB.family.kordai_today || [];
   h += `<div class="muted" style="margin-top:8px">🏡 Сегодня у Ата и Әже: ${kt.length ? kt.map(id => PUB.players.find(p => p.id === id)?.avatar).join(' ') : 'пока никто не доехал'}</div>`;
@@ -293,7 +295,7 @@ function openPlan(force) {
   const list = PUB.nodes.filter(n => n.id !== here && isOpen(n.id)).map(n => ({ n, r: shortest(here, n.id) })).filter(x => x.r)
     .sort((a, b) => (b.n.id === 'KOR') - (a.n.id === 'KOR') || (!!homes[b.n.id]) - (!!homes[a.n.id]) || a.r.km - b.r.km);
   const locked = REGS().filter(R => !(ME.unlocked || []).includes(R.id) && regCities(R.id).length);
-  sheet(`<h2>Куда едем?</h2><div class="muted">Отсюда: ${esc(nname(here))}${ME.trip ? ' · ⚠️ текущая поездка будет заменена (км уже засчитаны)' : ''}</div>${+ME.today_km >= +PUB.config.daily_km_cap ? `<div class="capnote">На сегодня лимит ${fmt(PUB.config.daily_km_cap)} км пройден, продолжим завтра 🌙 Маршрут выбрать можно, а ехать — завтра.</div>` : ''}` + list.map(({ n, r }) => {
+  sheet(`<h2>Куда едем?</h2><div class="muted">Отсюда: ${esc(nname(here))}${ME.trip ? ' · ⚠️ текущая поездка будет заменена (км уже засчитаны)' : ''}</div>${+ME.today_km >= +PUB.config.daily_km_cap && +ME.bonus_km > 0 ? bonusNote(+ME.bonus_km) : +ME.today_km >= +PUB.config.daily_km_cap ? `<div class="capnote">На сегодня лимит ${fmt(PUB.config.daily_km_cap)} км пройден, продолжим завтра 🌙 Маршрут выбрать можно, а ехать — завтра.</div>` : ''}` + list.map(({ n, r }) => {
     const who = homes[n.id]?.map(p => p.avatar + ' ' + esc(p.name)).join(', ');
     return `<button class="opt" data-to="${n.id}"><span class="i">${n.id === 'KOR' ? '🏡' : n.kind === 'city' ? '🏙️' : '🏘️'}</span><span><b>${esc(n.name)}${n.id === 'KOR' ? ' — к Ата и Әже' : ''}</b><small>${fmt(r.km)} км по дороге${who ? ' · в гости к: ' + who : ''}${n.souvenir ? ' · сувенир: ' + esc(n.souvenir) : ''}</small></span></button>`;
   }).join('') + (locked.length ? `<h3 style="margin:16px 0 4px">🔒 Закрытые края</h3><div class="muted">Открываются звёздами ⭐ за добрые дела в жизни.</div>` + locked.map(R => `<button class="opt off-lock" data-lock="${R.id}"><span class="i">🔒</span><span><b>${R.e || ''} ${esc(R.n)}</b><small>${regCities(R.id).map(n => esc(n.name)).join(', ')} · нужно ${R.need} ⭐ (у тебя ${ME.stars || 0})</small></span></button>`).join('') : '') + `<button class="btn" style="width:100%;margin-top:12px" onclick="document.getElementById('modal').click()">Отмена</button>`);
@@ -355,7 +357,8 @@ async function flushNow() {
 }
 $('#tripExit').onclick = goHome;
 const isAuto = tr => tr === 'bus' || tr === 'train' || tr === 'plane';
-const capLeft = () => Math.max(0, (+PUB.config.daily_km_cap || 2500) - (+ME.today_km || 0) - T.inflight - T.pendKm);
+const capLeft = () => Math.max(0, Math.max(0, capKm() - (+ME.today_km || 0)) + Math.max(0, +ME.bonus_km || 0) - T.inflight - T.pendKm);
+const bonusLeftLocal = () => Math.max(0, (+ME.bonus_km || 0) - Math.max(0, (+ME.today_km || 0) + T.inflight + T.pendKm - Math.max(capKm(), +ME.today_km || 0)));
 const localDone = () => Math.min(T.trip.total, T.server + T.inflight + T.pendKm);
 
 function addKm(km, isTap) {
@@ -461,8 +464,9 @@ function arrival(events) {
   sheet(`<div style="text-align:center"><div style="font-size:64px">${to === 'KOR' ? '👵🏡👴' : '🎉'}</div><h2>${title}</h2><p>${text}</p>${raceHtml}
     ${cities.length ? `<p>Новые места: ${cities.map(c => esc(nname(c.node))).join(', ')}</p>` : ''}
     ${del.length ? `<p>🎁 Подарки для Әже доставлены: ${del.map(d => esc(nodes()[d.node]?.souvenir) + ' (+' + d.tokens + ' 🪙)').join(', ')}</p>` : ''}
-    <p class="muted">Жетонов теперь: ${ME.tokens} 🪙</p><button class="big-btn teal" id="arrOk">Рахмет! 🙌</button></div>`, false);
+    <p class="muted">Жетонов теперь: ${ME.tokens} 🪙</p>${CINFO(to) ? `<button class="big-btn" id="arrCity" style="margin-bottom:10px">📖 Узнать о городе</button>` : ''}<button class="big-btn teal" id="arrOk">Рахмет! 🙌</button></div>`, false);
   $('#arrOk').onclick = () => { closeSheet(); show('app'); refresh(); };
+  if ($('#arrCity')) $('#arrCity').onclick = () => { show('app'); refresh(); cityCard(to, { go: false }); };
 }
 function drawTrip() {
   if (!T) return;
@@ -472,7 +476,7 @@ function drawTrip() {
   const next = stops.find(s => s.at > done + 1e-6);
   const RT = raceTripHtml(done, total);
   $('#route').innerHTML = `<div class="line"><div class="track"></div><div class="fill" style="width:${pct(done)}%"></div>${stops.map(s => `<div class="stop ${s.at <= done ? 'done' : ''}" style="left:${pct(s.at)}%"></div>`).join('')}<div class="who" style="left:${pct(done)}%">${T.TR.icon}</div>${RT.marker}</div>
-    ${T.capped ? `<div class="capnote">На сегодня лимит ${fmt(PUB.config.daily_km_cap)} км пройден, продолжим завтра 🌙<br><small>Поездка сохранена — завтра можно ехать дальше.</small></div>` : ''}<div class="names">${stops.length <= 5 ? stops.map(s => `<span>${esc(nname(s.n))}</span>`).join('') : `<span>${esc(nname(stops[0].n))}</span><span>…</span><span>${esc(nname(stops.at(-1).n))}</span>`}</div>`;
+    ${!T.capped && (+ME.today_km || 0) + T.pendKm + T.inflight >= capKm() - 1e-6 && +ME.bonus_km > 0 ? bonusNote(bonusLeftLocal()) : ''}${T.capped ? `<div class="capnote">На сегодня лимит ${fmt(PUB.config.daily_km_cap)} км пройден, продолжим завтра 🌙<br><small>Поездка сохранена — завтра можно ехать дальше.</small></div>` : ''}<div class="names">${stops.length <= 5 ? stops.map(s => `<span>${esc(nname(s.n))}</span>`).join('') : `<span>${esc(nname(stops[0].n))}</span><span>…</span><span>${esc(nname(stops.at(-1).n))}</span>`}</div>`;
   $('#tripStats').innerHTML = `<div><b>${fmt(total - done)}</b><small>км осталось</small></div><div><b>${next ? esc(nname(next.n)) : '🏁'}</b><small>${next ? 'через ' + fmt(next.at - done) + ' км' : 'финиш'}</small></div>${RT.stat || `<div><b>${fmt(ME.today_km + T.pendKm + T.inflight)}</b><small>км сегодня</small></div>`}`;
   const meter = $('#meter'); if (meter) {
     const v = T.tr === 'car' ? T.fuel : T.stamina;
@@ -757,12 +761,15 @@ function renderAch() {
     Object.entries(Z.ACH).map(([id, a]) => `<div class="ach ${ME.achievements.includes(id) ? 'on' : ''}"><div class="i">${a.i}</div><b>${a.t}</b><small>${a.d}</small></div>`).join('') + `</div></div>`;
   h += `<div class="card"><h3>🎁 Подарки для Әже</h3><div class="muted">Проезжай города — собирай сувениры и вези в Кордай. Новый сувенир: +10 🪙, повтор: +3 🪙.</div>` +
     PUB.nodes.filter(n => n.souvenir && (isOpen(n.id) || ME.gifts.includes(n.id) || ME.delivered.includes(n.id))).map(n => `<div class="row"><div class="av">${ME.delivered.includes(n.id) ? '✅' : ME.gifts.includes(n.id) ? '🎒' : '▫️'}</div><div class="grow"><b>${esc(n.souvenir)}</b><small>${esc(n.name)}${ME.delivered.includes(n.id) ? ' · доставлено Әже' : ME.gifts.includes(n.id) ? ' · в сумке, вези в Кордай' : ''}</small></div></div>`).join('') + (PUB.nodes.some(n => n.souvenir && !isOpen(n.id)) ? `<div class="muted" style="margin-top:8px">🔒 Ещё ${PUB.nodes.filter(n => n.souvenir && !isOpen(n.id)).length} сувениров ждут в закрытых краях.</div>` : '') + `</div>`;
+  h += kraevedCard();
+  h += `<div class="card"><h3>🌐 Язык игры</h3>${langSwitch()}</div>`;
   h += enProfileCard();
   h += `<div class="card"><h3>📊 Моя дорога</h3><div class="stats"><div class="stat"><b>${fmt(ME.km_total)}</b><small>км всего</small></div><div class="stat"><b>${fmt(ME.longest_trip)}</b><small>самая длинная поездка</small></div><div class="stat"><b>${ME.quiz_ok}</b><small>верных ответов</small></div></div>
     <div class="muted" style="margin-top:10px">Транспорт: ${Object.entries(Z.TRANSPORT).map(([id, t]) => `<span style="opacity:${ME.transports.includes(id) ? 1 : .3}">${t.icon}</span>`).join(' ')} · Был(а) в: ${ME.visited.map(v => esc(N[v]?.name)).join(', ')}</div></div>`;
   $('#tab-ach').innerHTML = h;
   $('#enTg').onclick = () => { LS.set('zhol_en_off_' + ME.id, !enOff()); renderAch(); toast(enOff() ? 'Слова в дороге скрыты' : 'Слова в дороге включены 📘'); };
   $('#tab-ach').querySelectorAll('[data-lang]').forEach(b => b.onclick = () => enSetLang(b.dataset.lang));
+  bindCityBtns($('#tab-ach'));
 }
 /* ---------- банк ---------- */
 const STATUS = { pending: ['wait', 'ждёт родителей'], approved: ['ok', 'подтверждено'], done: ['ok', 'выдано ✓'], rejected: ['no', 'отклонено'] };
@@ -774,13 +781,11 @@ function renderBank() {
   let h = `<div class="card"><h3>🏦 Семейный банк</h3><div style="font-size:30px;font-weight:800">${ME.tokens} 🪙</div><div class="muted">${rateText(cfg)} Лимит заработка: ${cfg.daily_token_cap} 🪙 в день. Награды до ${cfg.small_reward_max} 🪙 одобряются сразу, дороже — после «да» родителей (запрос приходит твоим родителям).</div></div>`;
   h += `<div class="card"><h3>🎁 Награды</h3>` + cat.map(it => { const big = it.big || it.cost > cfg.small_reward_max; return `<div class="row"><div class="av">${esc(it.emoji || '🎁')}</div><div class="grow"><b>${esc(it.title)}</b><small>${it.cost} 🪙${cfg.rate_preset !== 'points' ? ' ≈ ' + fmt(it.cost * cfg.tenge_per_token) + ' ₸' : ''}${big ? ' · нужно одобрение' : ''}</small></div><button class="btn p" data-buy="${esc(it.id)}" ${ME.tokens < it.cost ? 'disabled style="opacity:.4"' : ''}>Обменять</button></div>`; }).join('') + `</div>`;
   h += `<div class="card"><h3>📜 Задания от родителей</h3>${quests.length ? quests.map(q => { const r = REQS.find(x => x.kind === 'quest' && x.item?.id === q.id && x.status !== 'rejected'); return `<div class="row"><div class="av">⭐</div><div class="grow"><b>${esc(q.title)}</b><small>+${q.reward} 🪙</small></div>${r ? stTag(r) : `<button class="btn p" data-quest="${q.id}">Сделал!</button>`}</div>`; }).join('') : '<div class="muted">Пока заданий нет.</div>'}</div>`;
-  h += `<div class="card"><h3>👟 Мои шаги за день</h3><div class="muted">Посмотри шаги в телефоне (Здоровье / Google Fit) и впиши. 1 шаг ≈ 0,7 м. Км добавятся после подтверждения родителями, раз в день, до 30 000 шагов.</div><div class="inline" style="margin-top:8px"><input id="steps" type="number" inputmode="numeric" min="100" max="30000" placeholder="например, 8000"><button class="btn p" id="stepsBtn">Отправить</button></div></div>`;
   const RB = REQS.filter(r => r.kind !== 'deed');
-  h += `<div class="card"><h3>🧾 Мои запросы</h3>${RB.length ? RB.map(r => `<div class="row"><div class="grow"><b>${r.kind === 'reward' ? esc(r.item.title) + ' · ' + r.cost + ' 🪙' : r.kind === 'quest' ? '⭐ ' + esc(r.item.title) : '👟 ' + r.item.steps + ' шагов = ' + r.item.km + ' км'}</b><small>${new Date(r.created_at).toLocaleDateString('ru-RU')}${r.note ? ' · ' + esc(r.note) : ''}</small></div>${stTag(r)}</div>`).join('') : '<div class="muted">Пока пусто.</div>'}</div>`;
+  h += `<div class="card"><h3>🧾 Мои запросы</h3>${RB.length ? RB.map(r => `<div class="row"><div class="grow"><b>${r.kind === 'reward' ? esc(r.item.title) + ' · ' + r.cost + ' 🪙' : r.kind === 'quest' ? '⭐ ' + esc(r.item.title) : kindTxt(r)}</b><small>${fdate(r.created_at)}${r.note ? ' · ' + esc(r.note) : ''}</small></div>${stTag(r)}</div>`).join('') : '<div class="muted">Пока пусто.</div>'}</div>`;
   $('#tab-bank').innerHTML = h;
   $('#tab-bank').querySelectorAll('[data-buy]').forEach(b => b.onclick = () => { const it = cat.find(x => x.id === b.dataset.buy); if (confirm(`Обменять ${it.cost} 🪙 на «${it.title}»?`)) req('reward', { id: it.id }); });
   $('#tab-bank').querySelectorAll('[data-quest]').forEach(b => b.onclick = () => req('quest', { id: +b.dataset.quest }));
-  $('#stepsBtn').onclick = () => req('steps', { steps: +$('#steps').value });
 }
 async function req(kind, payload) {
   try { const r = await rpc('zhol_request', { p: SESSION.id, code: SESSION.code, kind, payload }); if (!r.ok) return toast(errText(r.error)); ME = r.me; REQS = r.requests; toast('Отправлено! Рахмет 🙌'); renderApp(); }
@@ -848,7 +853,12 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) { if
 function famLogout() { chatClose(); chatBadge(0); clearInterval(famPoll); LS.del('zhol_fam'); LS.del('zhol_famdata'); LS.set('zhol_mode', ''); FAM = null; FAMDATA = null; show('login'); loadPub().then(renderKids).catch(() => {}); }
 $('#famExit').onclick = () => { if (confirm('Выйти из семейного просмотра?')) famLogout(); };
 $('#famRefresh').onclick = () => { refreshFamily(); toast('Обновлено'); };
-const fdt = s => new Date(s).toLocaleString('ru-RU', { timeZone: 'Asia/Almaty', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+const KK_MON = ['қаң.', 'ақп.', 'нау.', 'сәу.', 'мам.', 'мау.', 'шіл.', 'там.', 'қыр.', 'қаз.', 'қар.', 'жел.'];
+function dparts(s) { const p = {}; for (const x of new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Almaty', year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(s))) p[x.type] = x.value; return p; }
+const dday = s => { if (LG() !== 'kk') return new Date(s).toLocaleDateString(LOC(), { timeZone: 'Asia/Almaty', day: 'numeric', month: 'short' }); const p = dparts(s); return `${+p.day} ${KK_MON[+p.month - 1]}`; };
+const dtime = s => { const p = dparts(s); return `${p.hour}:${p.minute}`; };
+const fdt = s => `${dday(s)}, ${dtime(s)}`;
+const fdate = s => { if (LG() !== 'kk') return new Date(s).toLocaleDateString(LOC(), { timeZone: 'Asia/Almaty' }); const p = dparts(s); return `${p.day}.${p.month}.${p.year}`; };
 function tripLine(p) {
   if (!p.trip) return `📍 ${p.location === 'KOR' ? 'в Кордае, у Ата и Әже 🏡' : 'в ' + esc(nname(p.location))}`;
   const T = Z.TRANSPORT[p.trip.transport], pct = Math.round(100 * p.trip.done / p.trip.total), org = p.trip.origin || p.trip.path[0];
@@ -873,6 +883,7 @@ function renderFamilyView(r) {
       <div class="kstatus">${tripLine(k)}</div>${pct !== null ? `<div class="bar"><i style="width:${pct}%"></i></div><div class="muted">${fmt(k.trip.done)} из ${fmt(k.trip.total)} км</div>` : ''}
       <div class="stats"><div class="stat"><b>${fmt(k.today_km)}</b><small>км сегодня</small></div><div class="stat"><b>${fmt(k.week_km)}</b><small>км за неделю</small></div><div class="stat"><b>${fmt(k.km_total)}</b><small>км всего</small></div></div>
       <div class="kblock"><b>⭐ Добрые дела:</b> ${k.stars || 0} ⭐ · открыто краёв ${(k.unlocked || []).length} из ${REGS().length}${(k.unlocked || []).length ? ' — ' + k.unlocked.map(u => esc(regInfo(u).n)).join(', ') : ''}${nextReg(k) ? ` · до «${esc(nextReg(k).n)}» ещё ${Math.max(0, nextReg(k).need - (k.stars || 0))} ⭐` : ''}</div>${enFamLine(k)}
+      <div class="kblock"><b>🚶 Бонус от шагов:</b> ${fmt(k.bonus_km || 0)} км · 📖 справок о городах: ${(k.cities_read || []).length}/32</div>
       <div class="kblock"><b>🗺️ Города (${k.visited.length}):</b> ${k.visited.map(v => esc(N[v]?.name || v)).join(', ')}</div>
       <div class="kblock"><b>🎁 Сувениры:</b> ${k.delivered.length ? 'доставлено Әже — ' + k.delivered.map(g => esc(N[g]?.souvenir)).join(', ') : 'пока не доставлено'}${k.gifts.length ? '; в сумке — ' + k.gifts.map(g => esc(N[g]?.souvenir)).join(', ') : ''}</div>
       <div class="kblock"><b>🏅 Достижения (${k.achievements.length}/${Object.keys(Z.ACH).length}):</b> ${k.achievements.length ? k.achievements.map(a => `<span class="tag" title="${esc(Z.ACH[a]?.d)}">${Z.ACH[a]?.i} ${esc(Z.ACH[a]?.t || a)}</span>`).join(' ') : 'пока нет'}</div>
@@ -904,7 +915,7 @@ function renderFamilyView(r) {
   mapZoomInit(); renderMap($('#pmap'), null);
   $('#parentMain').querySelectorAll('[data-fdec]').forEach(b => b.onclick = () => famDecide(+b.dataset.fdec, b.dataset.s, b));
 }
-function kindTxt(r) { if (r.kind === 'deed') return deedTxt(r); return r.kind === 'reward' ? `${esc(r.item.emoji || '🎁')} ${esc(r.item.title)} · ${r.cost} 🪙` : r.kind === 'quest' ? `⭐ ${esc(r.item.title)} (+${r.item.reward} 🪙)` : `👟 ${r.item.steps} шагов → ${r.item.km} км`; }
+function kindTxt(r) { if (r.kind === 'deed') return deedTxt(r); return r.kind === 'reward' ? `${esc(r.item.emoji || '🎁')} ${esc(r.item.title)} · ${r.cost} 🪙` : r.kind === 'quest' ? `⭐ ${esc(r.item.title)} (+${r.item.reward} 🪙)` : `🚶 ${fmt(r.item.steps)} шагов → ${fmt(r.item.km)} бонусных км${r.item.comment ? ` — <span class="nt">«${esc(r.item.comment)}»</span>` : ''}`; }
 ERR.not_your_kid = 'Это запрос не вашего ребёнка'; ERR.no_request = 'Запрос не найден'; ERR.approve_first = 'Сначала подтвердите'; ERR.already = 'Уже решено';
 async function famDecide(id, status, btn) {
   if (!FAM) return;
@@ -934,6 +945,7 @@ function renderAdmin() {
     <label>Награды до N жетонов — без одобрения</label><input id="cSmall" type="number" min="0" value="${cfg.small_reward_max}">
     <label>Билет на самолёт за каждые N км по земле</label><input id="cTicket" type="number" min="50" value="${cfg.ticket_every_km}">
     <label>Лимит км в день на ребёнка</label><input id="cKmCap" type="number" min="50" value="${cfg.daily_km_cap}">
+    <label>🚶 Шаги: сколько бонусных км за 1000 шагов</label><input id="cSteps" type="number" min="0" max="100" step="0.5" value="${cfg.steps_km_per_1000 ?? 10}">
     <button class="big-btn teal" id="cSave">Сохранить</button></div>`;
   h += deedAdminCard(cfg);
   h += `<div class="card"><h3>🎁 Каталог наград</h3><div class="muted">Пример — меняйте как удобно. «Крупная» = всегда нужно ваше одобрение.</div><div id="catRows">${A.catalog.map(catRow).join('')}</div>
@@ -951,7 +963,7 @@ function renderAdmin() {
   $('#adminMain').querySelectorAll('[data-act]').forEach(b => b.onclick = () => kidActions(P(b.dataset.act)));
   $('#cSave').onclick = () => {
     const pr = $('#cPreset').value, tenge = pr === '5' ? 5 : pr === '10' ? 10 : pr === 'points' ? 0 : +$('#cTenge').value;
-    adm('set_config', { config: { rate_preset: pr, tenge_per_token: tenge, daily_token_cap: +$('#cCap').value, km_per_token: +$('#cKm').value, small_reward_max: +$('#cSmall').value, ticket_every_km: +$('#cTicket').value, daily_km_cap: +$('#cKmCap').value } });
+    adm('set_config', { config: { rate_preset: pr, tenge_per_token: tenge, daily_token_cap: +$('#cCap').value, km_per_token: +$('#cKm').value, small_reward_max: +$('#cSmall').value, ticket_every_km: +$('#cTicket').value, daily_km_cap: +$('#cKmCap').value, steps_km_per_1000: Math.max(0, Math.min(100, +$('#cSteps').value || 0)) } });
   };
   bindDeedAdmin(cfg);
   $('#catAdd').onclick = () => $('#catRows').insertAdjacentHTML('beforeend', catRow({ id: 'r' + Date.now(), title: '', cost: 50, emoji: '🎁' }));
@@ -1106,7 +1118,7 @@ function chatApply(r) {
   const sig = r.messages.map(m => m.id + (m.deleted ? 'd' : '')).join(',') + CHAT.mod + JSON.stringify(CHAT.rx);
   if (sig === CHAT.sig) return; CHAT.sig = sig; chatRender();
 }
-const ctime = s => { const d = new Date(s), t = d.toLocaleTimeString('ru-RU', { timeZone: 'Asia/Almaty', hour: '2-digit', minute: '2-digit' }); return new Date().toDateString() === d.toDateString() ? t : d.toLocaleDateString('ru-RU', { timeZone: 'Asia/Almaty', day: 'numeric', month: 'short' }) + ' ' + t; };
+const ctime = s => { const d = new Date(s), t = dtime(s); return new Date().toDateString() === d.toDateString() ? t : dday(s) + ' ' + t; };
 function chatRender() {
   const L = $('#chatList'), atBottom = L.scrollHeight - L.scrollTop - L.clientHeight < 80;
   const MS = CHAT.msgs.filter(m => !(m.kind === 'system' && m.deleted));
@@ -1188,7 +1200,7 @@ function deedPts(c, cat) { return cat === 'grade' ? `5 = ${c.p5} ⭐, 4 = ${c.p4
 function deedTxt(r) {
   const it = r.item || {};
   const am = it.cat === 'grade' ? ` «${it.amount}»` : it.cat === 'read' ? `: ${it.amount} стр.` : '';
-  return `${esc(it.e || '⭐')} ${esc(it.title || 'Доброе дело')}${am} · +${it.points} ⭐${it.comment ? ` — «${esc(it.comment)}»` : ''}`;
+  return `${esc(it.e || '⭐')} ${esc(it.title || 'Доброе дело')}${am} · +${it.points} ⭐${it.comment ? ` — <span class="nt">«${esc(it.comment)}»</span>` : ''}`;
 }
 const nextReg = who => REGS().filter(R => !(who.unlocked || []).includes(R.id)).sort((a, b) => a.need - b.need)[0] || null;
 let DEED_SEL = null;
@@ -1200,12 +1212,13 @@ function renderDeeds() {
   h += nx ? `<div class="muted">До края <b>${nx.e || ''} ${esc(nx.n)}</b> (${regCities(nx.id).map(n => esc(n.name)).join(', ')}) — ещё <b>${Math.max(0, nx.need - stars)} ⭐</b></div><div class="bar"><i style="width:${Math.min(100, Math.max(0, 100 * (stars - prev) / Math.max(1, nx.need - prev)))}%"></i></div>`
     : `<div class="muted">Все края открыты — весь Казахстан твой! 🇰🇿</div>`;
   h += `<div class="muted" style="margin-top:6px">Делай хорошие дела в жизни — отмечай их здесь. Звёзды засчитываются, когда <b>родители подтвердят</b>. За звёзды открываются новые города на карте.</div></div>`;
+  h += stepsCard();
   h += `<div class="card"><h3>✍️ Что я сделал(а) сегодня?</h3><div class="muted">Сегодня отмечено: ${nToday}/${maxDay}</div><div class="deedgrid">` + DEED_ORDER.filter(k => cats[k]).map(k => {
     const c = cats[k], used = +today[k] || 0, full = c.cap && used >= c.cap;
     return `<button class="deedbtn${DEED_SEL === k ? ' on' : ''}${full ? ' full' : ''}" data-deed="${k}"><span class="i">${esc(c.e)}</span><b>${esc(c.t)}</b><small>${deedPts(c, k)}${c.cap ? ` · сегодня ${used}/${c.cap} ⭐` : ''}</small></button>`;
   }).join('') + `</div><div id="deedForm"></div></div>`;
   const mine = REQS.filter(r => r.kind === 'deed');
-  h += `<div class="card"><h3>🧾 Мои добрые дела</h3>${mine.length ? mine.map(r => `<div class="row"><div class="grow"><b>${deedTxt(r)}</b><small>${new Date(r.created_at).toLocaleDateString('ru-RU')}${r.note ? ' · ' + esc(r.note) : ''}</small></div>${stTag(r)}</div>`).join('') : '<div class="muted">Пока пусто — начни с одного доброго дела 🙂</div>'}</div>`;
+  h += `<div class="card"><h3>🧾 Мои добрые дела</h3>${mine.length ? mine.map(r => `<div class="row"><div class="grow"><b>${deedTxt(r)}</b><small>${fdate(r.created_at)}${r.note ? ' · ' + esc(r.note) : ''}</small></div>${stTag(r)}</div>`).join('') : '<div class="muted">Пока пусто — начни с одного доброго дела 🙂</div>'}</div>`;
   h += `<div class="card"><h3>🗺️ Края Казахстана</h3><div class="muted">Сначала открыт юг: Алматы, Кордай, Тараз, Астана и дороги между ними.</div>` + REGS().slice().sort((a, b) => a.need - b.need).map(R => {
     const on = (ME.unlocked || []).includes(R.id);
     return `<div class="row reg${on ? ' on' : ''}"><div class="av">${on ? R.e || '✅' : '🔒'}</div><div class="grow"><b>${esc(R.n)}</b><small>${regCities(R.id).map(n => esc(n.name)).join(', ')}</small></div>${on ? '<span class="tag ok">открыт</span>' : `<span class="tag">${R.need} ⭐</span>`}</div>`;
@@ -1213,6 +1226,7 @@ function renderDeeds() {
   el.innerHTML = h;
   el.querySelectorAll('[data-deed]').forEach(b => b.onclick = () => { DEED_SEL = b.dataset.deed; renderDeeds(); $('#deedForm').scrollIntoView({ behavior: 'smooth', block: 'nearest' }); });
   if (DEED_SEL && cats[DEED_SEL]) deedForm(DEED_SEL, cats[DEED_SEL]);
+  bindSteps();
 }
 function deedForm(k, c) {
   let amount = k === 'grade' ? 5 : null;
@@ -1244,7 +1258,8 @@ function unlockCheer() {
   if (T || !vis('app')) return;
   LS.set(key, now);
   const names = fresh.map(r => regCities(r).map(n => n.name).join(', ')).join(', ');
-  sheet(`<div class="arr"><div style="font-size:56px">🔓✨</div><h2>Открыт новый край!</h2><p><b>${fresh.map(r => esc((regInfo(r).e || '') + ' ' + regInfo(r).n)).join(', ')}</b></p><p>Теперь можно поехать: ${esc(names)}. Жарайсың, ${esc(ME.name)}! ⭐</p><button class="big-btn teal" id="unlOk">Ура! Смотреть карту 🗺️</button></div>`);
+  sheet(`<div class="arr"><div style="font-size:56px">🔓✨</div><h2>Открыт новый край!</h2><p><b>${fresh.map(r => esc((regInfo(r).e || '') + ' ' + regInfo(r).n)).join(', ')}</b></p><p>Теперь можно поехать: ${esc(names)}. Жарайсың, ${esc(ME.name)}! ⭐</p><div class="inline" style="flex-wrap:wrap;justify-content:center;margin:6px 0 12px">${fresh.flatMap(r => regCities(r)).filter(n => CINFO(n.id)).map(n => `<button class="btn" data-ucity="${n.id}">📖 Узнать о городе: ${esc(n.name)}</button>`).join('')}</div><button class="big-btn teal" id="unlOk">Ура! Смотреть карту 🗺️</button></div>`);
+  $('#sheet').querySelectorAll('[data-ucity]').forEach(b => b.onclick = () => cityCard(b.dataset.ucity, { go: false }));
   $('#unlOk').onclick = () => { closeSheet(); setTab('map'); };
 }
 // админ: очки и пороги
@@ -1266,6 +1281,88 @@ function bindDeedAdmin(cfg) {
     D.max_day = Math.min(30, Math.max(1, Math.round(+$('#dMax').value || 10)));
     adm('set_config', { config: { deeds: D } });
   };
+}
+
+/* ---------- язык интерфейса ---------- */
+const UI_LANGS = [['ru', 'Русский'], ['kk', 'Қазақша'], ['en', 'English']];
+function langSwitch() { return `<div class="langsw nt" role="group" aria-label="Language">${UI_LANGS.map(([l, n]) => `<button type="button" class="${LG() === l ? 'on' : ''}" data-uilang="${l}">${n}</button>`).join('')}</div>`; }
+function uiLangSync() {
+  // язык, выбранный ребёнком на другом устройстве, применяется, если на этом устройстве язык ещё не выбирали
+  try { if (ME?.ui_lang && !localStorage.getItem('zhol_lang') && ME.ui_lang !== LG()) { localStorage.setItem('zhol_lang', ME.ui_lang); location.reload(); } } catch (e) {}
+}
+document.addEventListener('click', async e => {
+  const b = e.target.closest && e.target.closest('[data-uilang]'); if (!b) return;
+  const l = b.dataset.uilang; if (l === LG()) return;
+  if (SESSION && ME) { try { await rpc('zhol_ui_lang', { p: SESSION.id, code: SESSION.code, lang: l }); } catch (x) {} }
+  try { localStorage.setItem('zhol_lang', l); } catch (x) {}
+  if (window.I18N) I18N.setLang(l); else location.reload();
+});
+
+/* ---------- справки о городах «📖 О городе» ---------- */
+const CINFO = id => (window.ZHOL_CITIES || {})[id];
+const cnm = id => { const c = CINFO(id); return c ? c.n[LG()] || c.n.ru : nname(id); };
+const nloc = n => Number(n).toLocaleString(LG() === 'en' ? 'en-GB' : 'ru-RU');
+function srcLine(c) {
+  const bns = /Бюро/.test(c.popSrc || '');
+  const w = t3('Википедия', 'Уикипедия', 'Wikipedia'), b = t3('Бюро национальной статистики РК', 'ҚР Ұлттық статистика бюросы', 'Bureau of National Statistics of Kazakhstan');
+  return `${t3('Источник', 'Дереккөз', 'Source')}: ${bns ? b + ' · ' + w : w}, ${c.popY}`;
+}
+function cityCardHtml(id) {
+  const c = CINFO(id), L = LG(); if (!c) return '';
+  const st = [];
+  if (c.f) st.push(`<div><small>${t3('Основан', 'Негізі қаланды', 'Founded')}</small><b>${esc(c.f[L])}</b></div>`);
+  if (c.pop) st.push(`<div><small>${t3('Население', 'Халқы', 'Population')}</small><b>${nloc(c.pop)}</b><small>${t3('данные', 'дерек', 'data')} ${c.popY}</small></div>`);
+  if (c.area) st.push(`<div><small>${t3('Площадь', 'Аумағы', 'Area')}</small><b>${nloc(c.area)} ${t3('км²', 'км²', 'km²')}</b></div>`);
+  return `<div class="citycard nt"><h2>📖 ${esc(c.n[L])}</h2><div class="muted">📍 ${esc(c.reg[L])}</div>
+    <div class="cstats">${st.join('')}</div>
+    <h3>${t3('🏛️ Немного истории', '🏛️ Тарихтан', '🏛️ A bit of history')}</h3><p>${c.h[L].map(esc).join(' ')}</p>
+    <h3>${t3('👀 Что посмотреть и интересные факты', '👀 Не көруге болады, қызықты деректер', '👀 What to see & facts')}</h3><ul>${c.s[L].map(x => `<li>${esc(x)}</li>`).join('')}</ul>
+    ${c.fun && c.fun[L] ? `<div class="funfact">💡 ${esc(c.fun[L])}</div>` : ''}
+    <div class="src">${esc(srcLine(c))} · ${c.src.map((u, i) => `<a href="${esc(u)}" target="_blank" rel="noopener">[${i + 1}]</a>`).join(' ')}</div></div>`;
+}
+async function cityRead(id) {
+  if (!SESSION || !ME || !CINFO(id)) return;
+  try {
+    const r = await rpc('zhol_city_read', { p: SESSION.id, code: SESSION.code, city: id });
+    if (r.ok && r.me) { const before = ME.achievements || []; ME = r.me; if (r.new) { const k = ME.cities_read.length, na = ME.achievements.filter(a => !before.includes(a)).map(a => Z.ACH[a]).filter(Boolean);
+      toast(t3(`📖 Краевед: ${k}/32`, `📖 Өлкетанушы: ${k}/32`, `📖 Local explorer: ${k}/32`) + (r.tokens ? ` · +${r.tokens} 🪙` : '') + (na.length ? ' · 🏅 ' + na.map(a => a.t).join(', ') : ''), 2600); renderTop(); } }
+  } catch (e) {}
+}
+function renderTop() { try { $('#tok').textContent = ME.tokens; } catch (e) {} }
+function cityCard(id, opt = {}) {
+  if (!CINFO(id)) return toast(nname(id));
+  const canGo = ME && !ME.trip && id !== ME.location && isOpen(id) && shortest(ME.location, id);
+  sheet(cityCardHtml(id) + `<div class="inline" style="margin-top:12px;flex-wrap:wrap">${canGo && opt.go !== false ? `<button class="big-btn teal" id="ccGo">🛣️ ${t3('Поехать сюда', 'Осында бару', 'Go here')}</button>` : ''}<button class="big-btn nt" id="ccOk">${t3('Понятно 👍', 'Түсінікті 👍', 'Got it 👍')}</button></div>`, opt.onClose);
+  if ($('#ccGo')) $('#ccGo').onclick = () => openTransport(id);
+  $('#ccOk').onclick = () => { closeSheet(); if (opt.after) opt.after(); };
+  cityRead(id);
+}
+function cityTeaser(id) {
+  const c = CINFO(id); if (!c) return '';
+  return `<div class="teaser nt">📖 <b>${esc(c.n[LG()])}</b> — ${esc(c.t[LG()])}<br><small class="muted">${t3('Открой край — и прочитаешь всю справку о городе.', 'Өлкені аш — қала туралы толық анықтаманы оқисың.', 'Unlock the region to read the full city card.')}</small></div>`;
+}
+function kraevedCard() {
+  const rd = ME.cities_read || [], all = PUB.nodes || [];
+  return `<div class="card"><h3>📖 ${t3('Справки о городах', 'Қалалар туралы анықтама', 'City cards')} (${rd.length}/${all.length})</h3><div class="muted nt">${t3('Читай о городах Казахстана — за 5, 15 и все 32 справки будет достижение «Краевед». За каждый новый город +2 🪙.', 'Қазақстан қалалары туралы оқы — 5, 15 және барлық 32 анықтама үшін «Өлкетанушы» жетістігі беріледі. Әр жаңа қала үшін +2 🪙.', 'Read about the cities of Kazakhstan — 5, 15 and all 32 cards earn the «Local explorer» achievement. Each new city gives +2 🪙.')}</div>
+    <div class="citygrid nt">${all.map(n => `<button class="citybtn${rd.includes(n.id) ? ' on' : ''}${isOpen(n.id) ? '' : ' lk'}" data-city="${n.id}">${rd.includes(n.id) ? '✅' : isOpen(n.id) ? '📖' : '🔒'} ${esc(cnm(n.id))}</button>`).join('')}</div></div>`;
+}
+function bindCityBtns(root) { root.querySelectorAll('[data-city]').forEach(b => b.onclick = () => { const id = b.dataset.city; if (isOpen(id)) cityCard(id); else openLocked(regOf(id), id); }); }
+
+/* ---------- шаги -> бонусные км ---------- */
+const stepRate = () => +PUB.config.steps_km_per_1000 || 10;
+const capKm = () => +PUB.config.daily_km_cap || 2500;
+function bonusNote(left) { return `<div class="capnote bonus">${t3(`Лимит дня пройден — едешь на бонусных км от шагов 🚶 (осталось ${fmt(left)} км)`, `Күндік шек өтілді — қадамнан жиналған бонус км-мен келе жатырсың 🚶 (${fmt(left)} км қалды)`, `Daily limit reached — you're travelling on bonus km from your steps 🚶 (${fmt(left)} km left)`)}</div>`; }
+function stepsCard() {
+  const today = (REQS || []).find(r => r.kind === 'steps' && new Date(r.created_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Almaty' }) === new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Almaty' }));
+  let h = `<div class="card steps"><h3>🚶 Мои шаги</h3><div class="stepbal"><b>${fmt(ME.bonus_km || 0)} км</b><small>бонусный запас от шагов</small></div>
+    <div class="muted">Посмотри в телефоне, сколько шагов ты прошёл(прошла) сегодня (Здоровье / Google Fit), и впиши. Родители подтвердят — и шаги станут бонусными км: ${fmt(1000)} шагов = ${fmt(stepRate())} км. Бонусные км тратятся только после дневного лимита ${fmt(capKm())} км. Раз в день, до ${fmt(30000)} шагов.</div>`;
+  if (today) h += `<div class="row" style="margin-top:8px"><div class="grow"><b>${kindTxt(today)}</b><small>Сегодня шаги уже отправлены</small></div>${stTag(today)}</div>`;
+  else h += `<div class="inline" style="margin-top:8px"><input id="steps" type="number" inputmode="numeric" min="100" max="30000" placeholder="например, 8000"></div><label>Комментарий (необязательно)</label><textarea id="stepsCm" maxlength="200" rows="2" placeholder="например, гуляли в парке"></textarea><button class="big-btn teal" id="stepsBtn">Отправить родителям 🚶</button>`;
+  return h + `</div>`;
+}
+function bindSteps() {
+  const b = $('#stepsBtn'); if (!b) return;
+  b.onclick = () => { const n = Math.round(+$('#steps').value); if (!(n >= 100 && n <= 30000)) return toast('Шагов — от 100 до 30 000'); req('steps', { steps: n, comment: ($('#stepsCm').value || '').slice(0, 200) }); };
 }
 
 /* ---------- навигация: Домой и кнопка «назад» ---------- */
@@ -1300,6 +1397,7 @@ window.addEventListener('popstate', () => {
   else history.back();
 });
 
+document.querySelectorAll('.langhost').forEach(el => el.innerHTML = langSwitch());
 if (LS.get('zhol_test', false)) window.__zhol = () => ({ ME, T });
 boot();
 })();

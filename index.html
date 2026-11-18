@@ -9,7 +9,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏡</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=17">
+<link rel="stylesheet" href="style.css?v=18">
 </head>
 <body>
 <div id="net" class="net hidden">Нет сети — прогресс сохраняется на устройстве</div>
@@ -20,6 +20,7 @@
     <div class="orn"></div>
     <h1>Жол <span>дорога к Ата и Әже</span></h1>
     <p class="lead">Сәлем! Выбери себя — и в путь. Вся семья едет в Кордай вместе.</p>
+    <div class="langhost"></div>
     <button class="pill" id="toFamily">👪 Вход для родителей</button>
   </div>
   <div id="kids" class="kids"></div>
@@ -74,12 +75,14 @@
 <!-- СЕМЬЯ (родители: прогресс + запросы детей) -->
 <section id="parent" class="screen hidden">
   <header class="top"><div class="me"><div class="av" style="background:#f5a524">👪</div><div><b id="famName">Семья</b><small>Прогресс и запросы детей · обновляется каждую минуту</small></div></div><div class="chips"><button class="chip famnb hidden" id="famBadge" title="Ждут ответа" onclick="document.getElementById('famReqs').scrollIntoView({behavior:'smooth'})"></button><button class="chip btn-ghost cbtn" id="famChat" title="Чат">💬<i class="chatnb nb hidden"></i></button><button class="chip btn-ghost" id="famHome" title="Наверх">🏠</button><button class="chip btn-ghost" id="famRefresh" title="Обновить">↻</button><button class="chip btn-ghost" id="famExit">Выйти</button></div></header>
+  <div class="langhost langbar"></div>
   <main id="parentMain" class="fam"></main>
 </section>
 
 <!-- РОДИТЕЛИ -->
 <section id="admin" class="screen hidden">
   <header class="top"><div class="me"><b>Режим родителей</b></div><div class="chips"><button class="chip btn-ghost cbtn" id="adminChat" title="Чат">💬<i class="chatnb nb hidden"></i></button><button class="chip btn-ghost" id="adminHome">🏠 Домой</button><button class="chip btn-ghost" id="adminExit">✕ Выйти</button></div></header>
+  <div class="langhost langbar"></div>
   <main id="adminMain" class="admin"></main>
 </section>
 
@@ -93,8 +96,10 @@
 <div class="toast" id="toast"></div>
 <div id="modal" class="modal hidden"><div class="sheet" id="sheet"></div></div>
 
-<script src="data.js?v=17"></script>
-<script src="words.js?v=17"></script>
-<script src="app.js?v=17"></script>
+<script src="data.js?v=18"></script>
+<script src="words.js?v=18"></script>
+<script src="cities_info.js?v=18"></script>
+<script src="i18n.js?v=18"></script>
+<script src="app.js?v=18"></script>
 </body>
 </html>
