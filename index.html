@@ -9,7 +9,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏡</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=12">
+<link rel="stylesheet" href="style.css?v=13">
 </head>
 <body>
 <div id="net" class="net hidden">Нет сети — прогресс сохраняется на устройстве</div>
@@ -41,17 +41,19 @@
     <button data-tab="map" class="on">🗺️<span>Карта</span></button>
     <button data-tab="family">👨‍👩‍👧‍👦<span>Семья</span></button>
     <button data-tab="ach">🏅<span>Награды</span></button>
+    <button data-tab="deeds">⭐<span>Дела</span></button>
     <button data-tab="bank">🪙<span>Банк</span></button>
     <button id="kidChat" class="chattab">💬<span>Чат</span><i class="chatnb nb hidden"></i></button>
   </nav>
   <main>
     <div class="tab" id="tab-map">
-      <div class="mapwrap"><svg id="map" viewBox="0 0 400 560" aria-label="Карта"></svg></div>
+      <div class="mapwrap"><svg id="map" viewBox="0 0 1000 575" aria-label="Карта Казахстана"></svg></div>
       <div class="panel" id="mapPanel"></div>
     </div>
     <div class="tab hidden" id="tab-family"></div>
     <div class="tab hidden" id="tab-ach"></div>
     <div class="tab hidden" id="tab-bank"></div>
+    <div class="tab hidden" id="tab-deeds"></div>
   </main>
 </section>
 
@@ -89,7 +91,7 @@
 <div class="toast" id="toast"></div>
 <div id="modal" class="modal hidden"><div class="sheet" id="sheet"></div></div>
 
-<script src="data.js?v=12"></script>
-<script src="app.js?v=12"></script>
+<script src="data.js?v=13"></script>
+<script src="app.js?v=13"></script>
 </body>
 </html>

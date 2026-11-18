@@ -24,20 +24,28 @@ async function rpc(fn, args) {
   if (!r.ok) throw new Error('Ошибка сервера ' + r.status);
   return r.json();
 }
-const ERR = { bad_code: 'Неверный код', locked: 'Слишком много попыток. Подожди 5 минут', bad_pin: 'Неверный PIN', no_ticket: 'Нужен билет 🎫', not_enough: 'Не хватает жетонов', too_many: 'Слишком много запросов ждут ответа', already: 'Уже отправлено', bad_path: 'Такой дороги нет', too_fast: 'Слишком быстро — это не засчитано', bad_steps: 'Минимум 100 шагов', bad_format: 'Неверный формат', on_trip: 'Кто-то из вас уже в пути', not_same_place: 'Вы должны быть в одном месте', has_challenge: 'У кого-то из вас уже есть жарыс', no_challenge: 'Вызов уже не действует', bad_transport: 'Этот транспорт нельзя', no_player: 'Нет такого игрока', no_rail: 'Здесь нет железной дороги', no_flight: 'Нет прямого рейса', no_stop: 'Сначала доедь до остановки', in_race: 'Во время жарыса пересаживаться нельзя' };
+const ERR = { bad_code: 'Неверный код', locked: 'Слишком много попыток. Подожди 5 минут', bad_pin: 'Неверный PIN', no_ticket: 'Нужен билет 🎫', not_enough: 'Не хватает жетонов', too_many: 'Слишком много запросов ждут ответа', already: 'Уже отправлено', bad_path: 'Такой дороги нет', too_fast: 'Слишком быстро — это не засчитано', bad_steps: 'Минимум 100 шагов', bad_format: 'Неверный формат', on_trip: 'Кто-то из вас уже в пути', not_same_place: 'Вы должны быть в одном месте', has_challenge: 'У кого-то из вас уже есть жарыс', no_challenge: 'Вызов уже не действует', bad_transport: 'Этот транспорт нельзя', no_player: 'Нет такого игрока', no_rail: 'Здесь нет железной дороги', no_flight: 'Нет прямого рейса', no_stop: 'Сначала доедь до остановки', in_race: 'Во время жарыса пересаживаться нельзя', locked_city: 'Этот город пока закрыт 🔒 — открой его добрыми делами ⭐', deed_limit: 'На сегодня хватит: не больше 10 дел в день 🌙', deed_cap: 'По этому делу на сегодня звёзд уже максимум — завтра ещё!', bad_cat: 'Выбери, что ты сделал(а)', bad_amount: 'Проверь число', too_long: 'Комментарий — до 200 символов' };
 const errText = e => ERR[e] || e || 'Что-то пошло не так';
 
 /* ---------- граф ---------- */
 const nodes = () => Object.fromEntries((PUB?.nodes || []).map(n => [n.id, n]));
-if (window.PUB_FILTER !== false) { const _f = s => { if (s && s.nodes) { s.nodes = s.nodes.filter(n => !n.region && Z.XY[n.id]); const ok = new Set(s.nodes.map(n => n.id)); s.edges = (s.edges || []).filter(e => ok.has(e.a) && ok.has(e.b)); } return s; }; window.__zf = _f; }
 const nname = id => nodes()[id]?.name || id;
-function adj(mode) {
+/* ---------- края и замки (добрые дела) ---------- */
+const DEEDS = () => PUB?.config?.deeds || { cats: {}, regions: [] };
+const REGS = () => DEEDS().regions || [];
+const regOf = id => nodes()[id]?.region || null;
+const regInfo = rid => REGS().find(r => r.id === rid) || { id: rid, n: rid, e: '🔒', need: 0 };
+const regCities = rid => (PUB?.nodes || []).filter(n => n.region === rid);
+// открыт ли город для ребёнка (то же правило проверяет сервер)
+const isOpen = (id, who = ME) => { const r = regOf(id); return !r || !!who?.unlocked?.includes(r); };
+const openFor = who => who ? (id => isOpen(id, who)) : (() => true);
+function adj(mode, ok = () => true) {
   const g = {};
-  for (const e of PUB.edges) if (e.mode === mode) { (g[e.a] ||= []).push([e.b, +e.km]); (g[e.b] ||= []).push([e.a, +e.km]); }
+  for (const e of PUB.edges) if (e.mode === mode && ok(e.a) && ok(e.b)) { (g[e.a] ||= []).push([e.b, +e.km]); (g[e.b] ||= []).push([e.a, +e.km]); }
   return g;
 }
-function shortest(from, to) {
-  const g = adj('road'), dist = { [from]: 0 }, prev = {}, done = new Set();
+function shortest(from, to, ok = openFor(ME)) {
+  const g = adj('road', ok), dist = { [from]: 0 }, prev = {}, done = new Set();
   while (true) {
     let u = null; for (const k in dist) if (!done.has(k) && (u === null || dist[k] < dist[u])) u = k;
     if (u === null) return null;
@@ -59,6 +67,7 @@ function trAvail(id, from, to, path) {
     if (!N[from]?.airport) return 'в ' + locName(from) + ' нет аэропорта';
     if (!N[to]?.airport) return 'в ' + locName(to) + ' нет аэропорта';
     if (!airKm(from, to)) return 'нет прямого рейса';
+    if (!isOpen(to)) return 'город закрыт 🔒';
     if (ME.tickets < 1) return 'нужен билет 🎫';
   }
   if (id === 'train') {
@@ -81,7 +90,7 @@ function trRows(from, to, r, skip) {
 }
 const interStops = trip => { let cum = 0; return trip.path.map((n, i) => { if (i > 0) cum += +trip.legs[i - 1]; return { n, at: cum, i }; }).slice(1, -1); };
 const mult = age => age <= 11 ? 1.6 : age <= 14 ? 1.25 : 1.0;
-function weekGoal() { let s = 0; for (const p of PUB.players) { const r = shortest(p.home, 'KOR'); s += r ? r.km : 0; } return s; }
+function weekGoal() { let s = 0; for (const p of PUB.players) { const r = shortest(p.home, 'KOR', openFor(p)); s += r ? r.km : 0; } return s; }
 function tripPos(trip, doneOverride) {
   const done = doneOverride ?? +trip.done; let cum = 0;
   for (let i = 0; i < trip.legs.length; i++) {
@@ -118,7 +127,7 @@ function codePad(title, sub, { min = 4, max = 4, onSubmit }) {
 }
 
 /* ---------- вход ---------- */
-async function loadPub() { const s = await rpc('zhol_public_state', LS.get('zhol_test', false) ? { test: true } : {}); PUB = window.__zf ? window.__zf(s) : s; LS.set('zhol_pub', s); return s; }
+async function loadPub() { const s = await rpc('zhol_public_state', LS.get('zhol_test', false) ? { test: true } : {}); PUB = s; LS.set('zhol_pub', s); return s; }
 function renderKids() {
   if (!PUB) { $('#kids').innerHTML = '<div class="muted" style="color:#fff">Загрузка…</div>'; return; }
   $('#kids').innerHTML = PUB.players.map(p => `<button class="kid" data-id="${p.id}"><div class="av" style="background:${p.color}22">${p.avatar}</div><b>${esc(p.name)}</b><small>${p.age} лет · ${esc(p.school)}</small><br><span class="where">${p.trip ? '🛣️ в пути' : '📍 ' + esc(nname(p.location))}</span></button>`).join('');
@@ -161,7 +170,7 @@ function renderApp() {
   if (!ME) return;
   $('#meChip').innerHTML = `<div class="av" style="background:${ME.color}">${ME.avatar}</div><div><b>Сәлем, ${esc(ME.name)}!</b><small>${Z.LEAGUES[ME.league].name} · ${ME.trip ? 'в пути' : '📍 ' + esc(nname(ME.location))}</small></div>`;
   $('#tok').textContent = ME.tokens; $('#tix').textContent = ME.tickets;
-  renderMap(); renderMapPanel(); renderFamily(); renderAch(); renderBank();
+  mapZoomInit(); renderMap(); renderMapPanel(); renderFamily(); renderAch(); renderBank(); renderDeeds(); unlockCheer();
 }
 $('#tabs').querySelectorAll('button').forEach(b => b.onclick = () => setTab(b.dataset.tab));
 $('#homeBtn').onclick = goHome; $('#adminHome').onclick = goHome; $('#famHome').onclick = () => { closeSheet(); window.scrollTo(0, 0); };
@@ -169,44 +178,90 @@ $('#homeBtn').onclick = goHome; $('#adminHome').onclick = goHome; $('#famHome').
 /* ---------- карта ---------- */
 function renderMap(svg = $('#map'), focusTrip = ME?.trip, doneOverride) {
   if (!PUB) return;
-  const X = Z.XY; let s = '';
-  s += `<path d="M300 520 q20 -30 45 -8 q15 -40 40 -10 l15 58 h-110z" fill="#d8c39a" opacity=".55"/><path d="M150 545 q20 -25 40 -5 q20 -30 45 0 l10 20 h-100z" fill="#d8c39a" opacity=".55"/>`;
-  s += `<ellipse cx="230" cy="232" rx="40" ry="9" transform="rotate(-18 230 232)" fill="#8ec5e0" opacity=".8"/><text x="196" y="215" font-size="9" fill="#3c7a98" font-style="italic">оз. Балхаш</text>`;
-  s += `<text x="200" y="553" font-size="10" fill="#8a6a3a" text-anchor="middle">↓ Кыргызстан</text><text x="12" y="20" font-size="10" fill="#8a6a3a">Схема, не в масштабе · км — реальные дороги</text>`;
-  for (const e of PUB.edges.filter(e => e.mode === 'air')) {
-    const a = X[e.a], b = X[e.b], mx = (a[0] + b[0]) / 2 - 40, my = (a[1] + b[1]) / 2;
+  const X = Z.XY, M = Z.MAP, kid = svg.id === 'map' && ME; let s = '';
+  // для карты родителей «закрыт» = закрыт для всех детей
+  const open = kid ? (id => isOpen(id)) : (id => !regOf(id) || PUB.players.some(p => isOpen(id, p)));
+  const nodeList = PUB.nodes.filter(n => X[n.id]);
+  svg.setAttribute('viewBox', `0 0 ${M.W} ${M.H}`);
+  s += `<path class="land" d="${M.KAZ}"/><path class="kgz" d="${M.KGZ}"/><path class="lake" d="${M.BALKHASH}"/><path class="lake" d="${M.ARAL}"/>`;
+  s += `<text class="geo-lbl" x="742" y="352">оз. Балхаш</text><text class="geo-lbl" x="318" y="372">Арал</text><text class="geo-lbl" x="14" y="470">Каспий</text><text class="geo-lbl" x="760" y="500">Кыргызстан</text>`;
+  s += `<text class="map-note" x="14" y="${M.H - 8}">Схема · км — реальные дороги · 🔒 открываются добрыми делами ⭐</text>`;
+  const here = kid && !ME.trip ? ME.location : null;
+  for (const e of PUB.edges.filter(e => e.mode === 'air' && X[e.a] && X[e.b])) {
+    const on = focusTrip?.transport === 'plane' ? false : here && (e.a === here || e.b === here) && open(e.a) && open(e.b) && nodes()[e.a]?.airport && nodes()[e.b]?.airport;
+    if (!on) continue;
+    const a = X[e.a], b = X[e.b], mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2 - Math.abs(a[0] - b[0]) * 0.12 - 20;
     s += `<path class="air" d="M${a} Q${mx},${my} ${b}"/>`;
   }
-  for (const e of PUB.edges.filter(e => e.mode === 'road')) s += `<line class="road" x1="${X[e.a][0]}" y1="${X[e.a][1]}" x2="${X[e.b][0]}" y2="${X[e.b][1]}"/>`;
-  for (const e of PUB.edges.filter(e => e.mode === 'road')) {
-    s += `<line class="road-in" x1="${X[e.a][0]}" y1="${X[e.a][1]}" x2="${X[e.b][0]}" y2="${X[e.b][1]}"/>`;
-    const a = X[e.a], b = X[e.b]; s += `<text class="km-lbl" x="${(a[0] + b[0]) / 2 + 4}" y="${(a[1] + b[1]) / 2 - 4}">${e.km}</text>`;
+  const roads = PUB.edges.filter(e => e.mode === 'road' && X[e.a] && X[e.b]);
+  for (const e of roads) { const lk = !open(e.a) || !open(e.b); s += `<line class="road${lk ? ' lk' : ''}" x1="${X[e.a][0]}" y1="${X[e.a][1]}" x2="${X[e.b][0]}" y2="${X[e.b][1]}"/>`; }
+  for (const e of roads) {
+    const lk = !open(e.a) || !open(e.b), a = X[e.a], b = X[e.b];
+    if (!lk) s += `<line class="road-in" x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}"/>`;
+    if (Math.hypot(a[0] - b[0], a[1] - b[1]) > 44) s += `<text class="km-lbl${lk ? ' lk' : ''}" x="${(a[0] + b[0]) / 2 + 3}" y="${(a[1] + b[1]) / 2 - 3}">${e.km}</text>`;
   }
   if (focusTrip) {
-    const pts = focusTrip.path.map(n => X[n]);
+    const pts = focusTrip.path.map(n => X[n]).filter(Boolean);
     if (focusTrip.transport === 'plane') { const a = pts[0], b = pts[1]; s += `<path class="route-hl" stroke-dasharray="6 6" d="M${a} L${b}"/>`; }
     else s += `<polyline class="route-hl" points="${pts.join(' ')}"/>`;
   }
-  for (const n of PUB.nodes) {
-    const [x, y] = X[n.id]; const home = n.id === 'KOR';
-    const [lx, ly, anchor] = Z.LBL[n.id] || [10, -8, 'start'];
-    s += `<g class="node ${n.kind}"><circle cx="${x}" cy="${y}" r="${home ? 11 : n.kind === 'city' ? 8 : 5.5}"/>${home ? `<text x="${x}" y="${y + 5}" text-anchor="middle" font-size="12">🏡</text>` : ''}<text x="${x + (home ? 0 : lx)}" y="${home ? y + 27 : y + ly}" text-anchor="${home ? 'middle' : anchor}">${esc(n.name)}${home ? ' · Ата и Әже' : ''}${n.airport ? ' ✈' : ''}</text></g>`;
+  for (const n of nodeList) {
+    const [x, y] = X[n.id]; const home = n.id === 'KOR', lk = !open(n.id);
+    const [lx, ly, anchor] = Z.LBL[n.id] || [9, 4, 'start'];
+    s += `<g class="node ${n.kind}${lk ? ' locked' : ''}" data-node="${n.id}"><circle cx="${x}" cy="${y}" r="${home ? 11 : n.kind === 'city' ? 7 : 5}"/>${home ? `<text x="${x}" y="${y + 5}" text-anchor="middle" font-size="12">🏡</text>` : ''}${lk ? `<text class="lock" x="${x}" y="${y + 3.5}" text-anchor="middle">🔒</text>` : ''}<text x="${x + (home ? 0 : lx)}" y="${home ? y + 27 : y + ly}" text-anchor="${home ? 'middle' : anchor}">${esc(n.name)}${home ? ' · Ата и Әже' : ''}${n.airport && !lk ? ' ✈' : ''}</text><circle class="hit" cx="${x}" cy="${y}" r="16"/></g>`;
   }
   // игроки
   const groups = {};
   for (const p of PUB.players) {
     const pp = ME && p.id === ME.id ? ME : p;
     const pos = pp.trip ? tripPos(pp.trip, p.id === ME?.id ? doneOverride : undefined) : X[pp.location];
+    if (!pos) continue;
     const key = pos.map(v => Math.round(v)).join(','); (groups[key] ||= { pos, list: [] }).list.push(pp);
   }
+  let mePos = null;
   for (const k in groups) {
     const g = groups[k];
     g.list.forEach((p, i) => {
-      const me = ME && p.id === ME.id, r = me ? 13 : 10, dx = (i - (g.list.length - 1) / 2) * 17, x = g.pos[0] + dx, y = g.pos[1] - 22;
-      s += `<g class="pin"><circle cx="${x}" cy="${y}" r="${r}" fill="${p.color}" stroke="#fff" stroke-width="${me ? 3 : 2}"/><text x="${x}" y="${y + (me ? 5 : 4)}" text-anchor="middle" style="font-size:${me ? 15 : 12}px">${p.avatar}</text></g>`;
+      const me = ME && p.id === ME.id, r = me ? 12 : 9, dx = (i - (g.list.length - 1) / 2) * 15, x = g.pos[0] + dx, y = g.pos[1] - 20;
+      if (me) mePos = [x, y];
+      s += `<g class="pin"><circle cx="${x}" cy="${y}" r="${r}" fill="${p.color}" stroke="#fff" stroke-width="${me ? 3 : 2}"/><text x="${x}" y="${y + (me ? 5 : 4)}" text-anchor="middle" style="font-size:${me ? 14 : 11}px">${p.avatar}</text></g>`;
     });
   }
   svg.innerHTML = s;
+  if (kid) svg.querySelectorAll('[data-node]').forEach(g => g.onclick = () => nodeTap(g.dataset.node));
+  mapFocus(svg, mePos || (ME && X[ME.location]));
+}
+// на телефоне карта крупнее и прокручивается; центрируем на себе
+function mapFocus(svg, pos) {
+  const w = svg.parentElement; if (!w || !pos || !w.classList.contains('zoom')) return;
+  if (w.dataset.focused === (ME?.id || '') + (ME?.location || '')) return;
+  requestAnimationFrame(() => { const sw = svg.getBoundingClientRect().width; if (!sw) return; const k = sw / Z.MAP.W; w.scrollLeft = pos[0] * k - w.clientWidth / 2; w.scrollTop = pos[1] * k - w.clientHeight / 2; w.dataset.focused = (ME?.id || '') + (ME?.location || ''); });
+}
+function mapZoomInit() {
+  for (const id of ['map', 'pmap']) {
+    const svg = $('#' + id); if (!svg) continue; const w = svg.parentElement;
+    if (w.dataset.zinit) continue; w.dataset.zinit = 1;
+    if (window.innerWidth < 900) w.classList.add('zoom');
+    const b = document.createElement('button'); b.className = 'zoom-btn'; b.type = 'button';
+    const lbl = () => b.textContent = w.classList.contains('zoom') ? '🗺️ Весь Казахстан' : '🔍 Крупнее';
+    lbl(); b.onclick = () => { w.classList.toggle('zoom'); delete w.dataset.focused; lbl(); renderMap(svg, svg.id === 'map' ? ME?.trip : null); };
+    w.parentElement.insertBefore(b, w.nextSibling);
+  }
+}
+function nodeTap(id) {
+  if (!ME) return;
+  if (!isOpen(id)) return openLocked(regOf(id));
+  const n = nodes()[id];
+  if (id === ME.location && !ME.trip) return toast('📍 Ты здесь: ' + n.name);
+  if (ME.trip) return toast(`${n.name}${n.souvenir ? ' · сувенир: ' + n.souvenir : ''}`, 2500);
+  if (shortest(ME.location, id)) openTransport(id); else toast('Сюда пока не доехать по открытым дорогам');
+}
+function openLocked(rid) {
+  const R = regInfo(rid), need = +R.need || 0, have = +ME?.stars || 0, left = Math.max(0, need - have);
+  sheet(`<h2>🔒 ${R.e || ''} ${esc(R.n)}</h2><div class="muted">Города края: ${regCities(rid).map(n => '<b>' + esc(n.name) + '</b>').join(', ')}</div>
+    <div class="lockbox"><div style="font-size:30px">⭐ ${have} / ${need}</div><div class="bar"><i style="width:${Math.min(100, need ? 100 * have / need : 100)}%"></i></div><div class="muted">${left ? `Нужно ещё <b>${left} ⭐</b> добрых дел. Звёзды дают хорошие оценки, прочитанные книги, помощь дома и добрые дела для людей — после подтверждения родителей.` : 'Звёзд хватает — край откроется после ближайшего подтверждения.'}</div></div>
+    <button class="big-btn" id="toDeeds">⭐ Отметить доброе дело</button>`);
+  $('#toDeeds').onclick = () => { closeSheet(); setTab('deeds'); };
 }
 function renderMapPanel() {
   const cfg = PUB.config, t = ME.trip; let h = racePanel();
@@ -234,13 +289,15 @@ function openPlan(force) {
   if (!force && ME.trip?.challenge && (PUB.challenges || []).some(c => c.id === +ME.trip.challenge && !c.winner)) { if (!confirm('Ты в жарысе! Если сменишь маршрут — засчитается поражение. Точно?')) return; }
   const here = ME.location, homes = {};
   for (const p of PUB.players) if (p.id !== ME.id) (homes[p.home] ||= []).push(p);
-  const list = PUB.nodes.filter(n => n.id !== here).map(n => ({ n, r: shortest(here, n.id) })).filter(x => x.r)
+  const list = PUB.nodes.filter(n => n.id !== here && isOpen(n.id)).map(n => ({ n, r: shortest(here, n.id) })).filter(x => x.r)
     .sort((a, b) => (b.n.id === 'KOR') - (a.n.id === 'KOR') || (!!homes[b.n.id]) - (!!homes[a.n.id]) || a.r.km - b.r.km);
+  const locked = REGS().filter(R => !(ME.unlocked || []).includes(R.id) && regCities(R.id).length);
   sheet(`<h2>Куда едем?</h2><div class="muted">Отсюда: ${esc(nname(here))}${ME.trip ? ' · ⚠️ текущая поездка будет заменена (км уже засчитаны)' : ''}</div>${+ME.today_km >= +PUB.config.daily_km_cap ? `<div class="capnote">На сегодня лимит ${fmt(PUB.config.daily_km_cap)} км пройден, продолжим завтра 🌙 Маршрут выбрать можно, а ехать — завтра.</div>` : ''}` + list.map(({ n, r }) => {
     const who = homes[n.id]?.map(p => p.avatar + ' ' + esc(p.name)).join(', ');
     return `<button class="opt" data-to="${n.id}"><span class="i">${n.id === 'KOR' ? '🏡' : n.kind === 'city' ? '🏙️' : '🏘️'}</span><span><b>${esc(n.name)}${n.id === 'KOR' ? ' — к Ата и Әже' : ''}</b><small>${fmt(r.km)} км по дороге${who ? ' · в гости к: ' + who : ''}${n.souvenir ? ' · сувенир: ' + esc(n.souvenir) : ''}</small></span></button>`;
-  }).join('') + `<button class="btn" style="width:100%;margin-top:12px" onclick="document.getElementById('modal').click()">Отмена</button>`);
+  }).join('') + (locked.length ? `<h3 style="margin:16px 0 4px">🔒 Закрытые края</h3><div class="muted">Открываются звёздами ⭐ за добрые дела в жизни.</div>` + locked.map(R => `<button class="opt off-lock" data-lock="${R.id}"><span class="i">🔒</span><span><b>${R.e || ''} ${esc(R.n)}</b><small>${regCities(R.id).map(n => esc(n.name)).join(', ')} · нужно ${R.need} ⭐ (у тебя ${ME.stars || 0})</small></span></button>`).join('') : '') + `<button class="btn" style="width:100%;margin-top:12px" onclick="document.getElementById('modal').click()">Отмена</button>`);
   $('#sheet').querySelectorAll('[data-to]').forEach(b => b.onclick = () => openTransport(b.dataset.to));
+  $('#sheet').querySelectorAll('[data-lock]').forEach(b => b.onclick = () => openLocked(b.dataset.lock));
 }
 function openTransport(to) {
   const here = ME.location, r = shortest(here, to), m = mult(ME.age);
@@ -577,7 +634,7 @@ function renderAch() {
   let h = `<div class="card"><h3>🏅 Мои достижения (${ME.achievements.length}/${Object.keys(Z.ACH).length})</h3><div class="muted">За каждое — +10 🪙</div><div class="grid2" style="margin-top:10px">` +
     Object.entries(Z.ACH).map(([id, a]) => `<div class="ach ${ME.achievements.includes(id) ? 'on' : ''}"><div class="i">${a.i}</div><b>${a.t}</b><small>${a.d}</small></div>`).join('') + `</div></div>`;
   h += `<div class="card"><h3>🎁 Подарки для Әже</h3><div class="muted">Проезжай города — собирай сувениры и вези в Кордай. Новый сувенир: +10 🪙, повтор: +3 🪙.</div>` +
-    PUB.nodes.filter(n => n.souvenir).map(n => `<div class="row"><div class="av">${ME.delivered.includes(n.id) ? '✅' : ME.gifts.includes(n.id) ? '🎒' : '▫️'}</div><div class="grow"><b>${esc(n.souvenir)}</b><small>${esc(n.name)}${ME.delivered.includes(n.id) ? ' · доставлено Әже' : ME.gifts.includes(n.id) ? ' · в сумке, вези в Кордай' : ''}</small></div></div>`).join('') + `</div>`;
+    PUB.nodes.filter(n => n.souvenir && (isOpen(n.id) || ME.gifts.includes(n.id) || ME.delivered.includes(n.id))).map(n => `<div class="row"><div class="av">${ME.delivered.includes(n.id) ? '✅' : ME.gifts.includes(n.id) ? '🎒' : '▫️'}</div><div class="grow"><b>${esc(n.souvenir)}</b><small>${esc(n.name)}${ME.delivered.includes(n.id) ? ' · доставлено Әже' : ME.gifts.includes(n.id) ? ' · в сумке, вези в Кордай' : ''}</small></div></div>`).join('') + (PUB.nodes.some(n => n.souvenir && !isOpen(n.id)) ? `<div class="muted" style="margin-top:8px">🔒 Ещё ${PUB.nodes.filter(n => n.souvenir && !isOpen(n.id)).length} сувениров ждут в закрытых краях.</div>` : '') + `</div>`;
   h += `<div class="card"><h3>📊 Моя дорога</h3><div class="stats"><div class="stat"><b>${fmt(ME.km_total)}</b><small>км всего</small></div><div class="stat"><b>${fmt(ME.longest_trip)}</b><small>самая длинная поездка</small></div><div class="stat"><b>${ME.quiz_ok}</b><small>верных ответов</small></div></div>
     <div class="muted" style="margin-top:10px">Транспорт: ${Object.entries(Z.TRANSPORT).map(([id, t]) => `<span style="opacity:${ME.transports.includes(id) ? 1 : .3}">${t.icon}</span>`).join(' ')} · Был(а) в: ${ME.visited.map(v => esc(N[v]?.name)).join(', ')}</div></div>`;
   $('#tab-ach').innerHTML = h;
@@ -593,7 +650,8 @@ function renderBank() {
   h += `<div class="card"><h3>🎁 Награды</h3>` + cat.map(it => { const big = it.big || it.cost > cfg.small_reward_max; return `<div class="row"><div class="av">${esc(it.emoji || '🎁')}</div><div class="grow"><b>${esc(it.title)}</b><small>${it.cost} 🪙${cfg.rate_preset !== 'points' ? ' ≈ ' + fmt(it.cost * cfg.tenge_per_token) + ' ₸' : ''}${big ? ' · нужно одобрение' : ''}</small></div><button class="btn p" data-buy="${esc(it.id)}" ${ME.tokens < it.cost ? 'disabled style="opacity:.4"' : ''}>Обменять</button></div>`; }).join('') + `</div>`;
   h += `<div class="card"><h3>📜 Задания от родителей</h3>${quests.length ? quests.map(q => { const r = REQS.find(x => x.kind === 'quest' && x.item?.id === q.id && x.status !== 'rejected'); return `<div class="row"><div class="av">⭐</div><div class="grow"><b>${esc(q.title)}</b><small>+${q.reward} 🪙</small></div>${r ? stTag(r) : `<button class="btn p" data-quest="${q.id}">Сделал!</button>`}</div>`; }).join('') : '<div class="muted">Пока заданий нет.</div>'}</div>`;
   h += `<div class="card"><h3>👟 Мои шаги за день</h3><div class="muted">Посмотри шаги в телефоне (Здоровье / Google Fit) и впиши. 1 шаг ≈ 0,7 м. Км добавятся после подтверждения родителями, раз в день, до 30 000 шагов.</div><div class="inline" style="margin-top:8px"><input id="steps" type="number" inputmode="numeric" min="100" max="30000" placeholder="например, 8000"><button class="btn p" id="stepsBtn">Отправить</button></div></div>`;
-  h += `<div class="card"><h3>🧾 Мои запросы</h3>${REQS.length ? REQS.map(r => `<div class="row"><div class="grow"><b>${r.kind === 'reward' ? esc(r.item.title) + ' · ' + r.cost + ' 🪙' : r.kind === 'quest' ? '⭐ ' + esc(r.item.title) : '👟 ' + r.item.steps + ' шагов = ' + r.item.km + ' км'}</b><small>${new Date(r.created_at).toLocaleDateString('ru-RU')}${r.note ? ' · ' + esc(r.note) : ''}</small></div>${stTag(r)}</div>`).join('') : '<div class="muted">Пока пусто.</div>'}</div>`;
+  const RB = REQS.filter(r => r.kind !== 'deed');
+  h += `<div class="card"><h3>🧾 Мои запросы</h3>${RB.length ? RB.map(r => `<div class="row"><div class="grow"><b>${r.kind === 'reward' ? esc(r.item.title) + ' · ' + r.cost + ' 🪙' : r.kind === 'quest' ? '⭐ ' + esc(r.item.title) : '👟 ' + r.item.steps + ' шагов = ' + r.item.km + ' км'}</b><small>${new Date(r.created_at).toLocaleDateString('ru-RU')}${r.note ? ' · ' + esc(r.note) : ''}</small></div>${stTag(r)}</div>`).join('') : '<div class="muted">Пока пусто.</div>'}</div>`;
   $('#tab-bank').innerHTML = h;
   $('#tab-bank').querySelectorAll('[data-buy]').forEach(b => b.onclick = () => { const it = cat.find(x => x.id === b.dataset.buy); if (confirm(`Обменять ${it.cost} 🪙 на «${it.title}»?`)) req('reward', { id: it.id }); });
   $('#tab-bank').querySelectorAll('[data-quest]').forEach(b => b.onclick = () => req('quest', { id: +b.dataset.quest }));
@@ -649,7 +707,7 @@ function actLine(a, P) {
   return who;
 }
 function renderFamilyView(r) {
-  FAMDATA = r; LS.set('zhol_famdata', r); PUB = window.__zf ? window.__zf(r.pub) : r.pub; LS.set('zhol_pub', r.pub);
+  FAMDATA = r; LS.set('zhol_famdata', r); PUB = r.pub; LS.set('zhol_pub', r.pub);
   const N = nodes(), P = id => PUB.players.find(p => p.id === id) || { avatar: '?', name: id };
   $('#famName').textContent = r.family.name;
   const kidCard = k => {
@@ -658,6 +716,7 @@ function renderFamilyView(r) {
     return `<div class="card kidcard"><div class="row" style="border:0;padding-top:0"><div class="av" style="background:${k.color};width:48px;height:48px;font-size:28px">${k.avatar}</div><div class="grow"><b style="font-size:18px">${esc(k.name)}</b><small>${k.age} лет · ${esc(k.school)} · ${Z.LEAGUES[k.league].name}</small></div><div class="chip" style="background:#fff1cf;color:#3a2400"><b>${k.tokens}</b> 🪙</div></div>
       <div class="kstatus">${tripLine(k)}</div>${pct !== null ? `<div class="bar"><i style="width:${pct}%"></i></div><div class="muted">${fmt(k.trip.done)} из ${fmt(k.trip.total)} км</div>` : ''}
       <div class="stats"><div class="stat"><b>${fmt(k.today_km)}</b><small>км сегодня</small></div><div class="stat"><b>${fmt(k.week_km)}</b><small>км за неделю</small></div><div class="stat"><b>${fmt(k.km_total)}</b><small>км всего</small></div></div>
+      <div class="kblock"><b>⭐ Добрые дела:</b> ${k.stars || 0} ⭐ · открыто краёв ${(k.unlocked || []).length} из ${REGS().length}${(k.unlocked || []).length ? ' — ' + k.unlocked.map(u => esc(regInfo(u).n)).join(', ') : ''}${nextReg(k) ? ` · до «${esc(nextReg(k).n)}» ещё ${Math.max(0, nextReg(k).need - (k.stars || 0))} ⭐` : ''}</div>
       <div class="kblock"><b>🗺️ Города (${k.visited.length}):</b> ${k.visited.map(v => esc(N[v]?.name || v)).join(', ')}</div>
       <div class="kblock"><b>🎁 Сувениры:</b> ${k.delivered.length ? 'доставлено Әже — ' + k.delivered.map(g => esc(N[g]?.souvenir)).join(', ') : 'пока не доставлено'}${k.gifts.length ? '; в сумке — ' + k.gifts.map(g => esc(N[g]?.souvenir)).join(', ') : ''}</div>
       <div class="kblock"><b>🏅 Достижения (${k.achievements.length}/${Object.keys(Z.ACH).length}):</b> ${k.achievements.length ? k.achievements.map(a => `<span class="tag" title="${esc(Z.ACH[a]?.d)}">${Z.ACH[a]?.i} ${esc(Z.ACH[a]?.t || a)}</span>`).join(' ') : 'пока нет'}</div>
@@ -666,7 +725,7 @@ function renderFamilyView(r) {
   const RQ = r.requests || [], open = RQ.filter(q => q.status === 'pending' || q.status === 'approved'), past = RQ.filter(q => q.status === 'done' || q.status === 'rejected').slice(0, 5);
   const KP = id => r.kids.find(k => k.id === id) || P(id);
   const rqRow = q => { const k = KP(q.player); return `<div class="row rq"><div class="av" style="background:${k.color || '#eee'}33">${k.avatar}</div><div class="grow"><b>${esc(k.name)}: ${kindTxt(q)}</b><small>${fdt(q.created_at)} · ${stTag(q)}${q.note ? ' · ' + esc(q.note) : ''}</small></div>${q.status === 'pending' ? `<div class="rqbtns"><button class="btn p" data-fdec="${q.id}" data-s="approved">✅ Подтвердить</button><button class="btn r" data-fdec="${q.id}" data-s="rejected">❌ Отклонить</button></div>` : q.status === 'approved' ? `<div class="rqbtns"><button class="btn" data-fdec="${q.id}" data-s="done">🎁 Выдано</button></div>` : ''}</div>`; };
-  let h = `<div class="card fam-reqs" id="famReqs"><h3>📬 Запросы детей ${r.pending ? `<span class="nb">${r.pending}</span>` : ''}</h3><div class="muted">Подтвердите или отклоните — ребёнок сразу увидит ответ. Подтверждённую награду отметьте «Выдано», когда отдадите её.</div>${open.length ? open.map(rqRow).join('') : '<div class="empty">Новых запросов нет 👍</div>'}${past.length ? `<details><summary>Недавно решённые</summary>${past.map(rqRow).join('')}</details>` : ''}</div>`;
+  let h = `<div class="card fam-reqs" id="famReqs"><h3>📬 Запросы детей ${r.pending ? `<span class="nb">${r.pending}</span>` : ''}</h3><div class="muted">Подтвердите или отклоните — ребёнок сразу увидит ответ. Подтверждённую награду отметьте «Выдано», когда отдадите её. ⭐ Добрые дела (оценки, чтение, помощь дома) подтверждайте, только если это правда — за звёзды открываются новые города.</div>${open.length ? open.map(rqRow).join('') : '<div class="empty">Новых запросов нет 👍</div>'}${past.length ? `<details><summary>Недавно решённые</summary>${past.map(rqRow).join('')}</details>` : ''}</div>`;
   $('#famBadge').innerHTML = r.pending ? `📬 <b>${r.pending}</b>` : ''; $('#famBadge').classList.toggle('hidden', !r.pending);
   let kh = '';
   if (r.family.all) for (const fm of r.families || []) { const ks = r.kids.filter(k => k.family === fm.id); if (ks.length) kh += `<h2 class="famhead">🏡 ${esc(fm.name)}</h2>` + ks.map(kidCard).join(''); }
@@ -675,16 +734,16 @@ function renderFamilyView(r) {
   const f = PUB.family, goal = weekGoal(), wk = +f.week_km;
   h += `<div class="fam-all"><div class="card"><h3>🏁 Вся семья</h3><div class="muted">Цель недели — все 8 детей доезжают из дома до Ата и Әже (${fmt(goal)} км).</div><div class="bar"><i style="width:${Math.min(100, 100 * wk / goal)}%"></i></div>
       <div class="stats"><div class="stat"><b>${fmt(wk)}</b><small>км за неделю</small></div><div class="stat"><b>${Math.round(100 * wk / goal)}%</b><small>цели недели</small></div><div class="stat"><b>${fmt(f.total_km)}</b><small>км всего</small></div></div></div>
-    <div class="card"><h3>🗺️ Кто где и куда едет</h3><div class="mapwrap"><svg id="pmap" viewBox="0 0 400 560"></svg></div>
+    <div class="card"><h3>🗺️ Кто где и куда едет</h3><div class="mapwrap"><svg id="pmap" viewBox="0 0 1000 575"></svg></div>
       ${PUB.players.map(p => `<div class="row"><div class="av" style="background:${p.color}33">${p.avatar}</div><div class="grow"><b>${esc(p.name)}</b><small>${tripLine(p)}</small></div></div>`).join('')}</div>
     ${raceCard(r.family.all ? null : c => r.kids.some(k => k.id === c.challenger || k.id === c.opponent))}
     <div class="card"><h3>🏆 Рейтинг недели</h3>${[...PUB.players].sort((a, b) => b.week_km - a.week_km || b.km_total - a.km_total).map((p, i) => `<div class="row"><div style="width:22px;font-weight:800">${i + 1}</div><div class="av" style="background:${p.color}33">${p.avatar}</div><div class="grow"><b>${esc(p.name)}</b><small>${Z.LEAGUES[p.league].name} · всего ${fmt(p.km_total)} км</small></div><b>${fmt(p.week_km)} км</b></div>`).join('')}</div>
     <div class="card"><h3>🕑 Последние события (${r.family.all ? 'все дети' : 'ваши дети'})</h3>${r.activity.length ? r.activity.slice(0, 15).map(a => `<div class="row"><div class="grow">${actLine(a, P)}<small>${fdt(a.at)}</small></div></div>`).join('') : '<div class="muted">Пока событий нет — дети ещё не выезжали.</div>'}</div></div>`;
   $('#parentMain').innerHTML = h;
-  renderMap($('#pmap'), null);
+  mapZoomInit(); renderMap($('#pmap'), null);
   $('#parentMain').querySelectorAll('[data-fdec]').forEach(b => b.onclick = () => famDecide(+b.dataset.fdec, b.dataset.s, b));
 }
-function kindTxt(r) { return r.kind === 'reward' ? `${esc(r.item.emoji || '🎁')} ${esc(r.item.title)} · ${r.cost} 🪙` : r.kind === 'quest' ? `⭐ ${esc(r.item.title)} (+${r.item.reward} 🪙)` : `👟 ${r.item.steps} шагов → ${r.item.km} км`; }
+function kindTxt(r) { if (r.kind === 'deed') return deedTxt(r); return r.kind === 'reward' ? `${esc(r.item.emoji || '🎁')} ${esc(r.item.title)} · ${r.cost} 🪙` : r.kind === 'quest' ? `⭐ ${esc(r.item.title)} (+${r.item.reward} 🪙)` : `👟 ${r.item.steps} шагов → ${r.item.km} км`; }
 ERR.not_your_kid = 'Это запрос не вашего ребёнка'; ERR.no_request = 'Запрос не найден'; ERR.approve_first = 'Сначала подтвердите'; ERR.already = 'Уже решено';
 async function famDecide(id, status, btn) {
   if (!FAM) return;
@@ -715,6 +774,7 @@ function renderAdmin() {
     <label>Билет на самолёт за каждые N км по земле</label><input id="cTicket" type="number" min="50" value="${cfg.ticket_every_km}">
     <label>Лимит км в день на ребёнка</label><input id="cKmCap" type="number" min="50" value="${cfg.daily_km_cap}">
     <button class="big-btn teal" id="cSave">Сохранить</button></div>`;
+  h += deedAdminCard(cfg);
   h += `<div class="card"><h3>🎁 Каталог наград</h3><div class="muted">Пример — меняйте как удобно. «Крупная» = всегда нужно ваше одобрение.</div><div id="catRows">${A.catalog.map(catRow).join('')}</div>
     <button class="btn" id="catAdd" style="margin-top:8px">+ Добавить</button> <button class="btn p" id="catSave">Сохранить каталог</button></div>`;
   h += `<div class="card"><h3>📜 Бонусные задания</h3><label>Задание</label><input id="qT" placeholder="например: прочитать 20 страниц и рассказать Әже по телефону"><div class="inline" style="margin-top:8px"><input id="qR" type="number" value="15" min="1" style="max-width:90px"> 🪙 <select id="qP" style="flex:1"><option value="">Всем</option>${A.players.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select><button class="btn p" id="qAdd">Дать</button></div>
@@ -732,6 +792,7 @@ function renderAdmin() {
     const pr = $('#cPreset').value, tenge = pr === '5' ? 5 : pr === '10' ? 10 : pr === 'points' ? 0 : +$('#cTenge').value;
     adm('set_config', { config: { rate_preset: pr, tenge_per_token: tenge, daily_token_cap: +$('#cCap').value, km_per_token: +$('#cKm').value, small_reward_max: +$('#cSmall').value, ticket_every_km: +$('#cTicket').value, daily_km_cap: +$('#cKmCap').value } });
   };
+  bindDeedAdmin(cfg);
   $('#catAdd').onclick = () => $('#catRows').insertAdjacentHTML('beforeend', catRow({ id: 'r' + Date.now(), title: '', cost: 50, emoji: '🎁' }));
   $('#catSave').onclick = () => {
     const rows = [...$('#catRows').querySelectorAll('.catrow')].map(r => ({ id: r.dataset.id, emoji: r.querySelector('.ce').value || '🎁', title: r.querySelector('.ct').value.trim(), cost: Math.max(1, +r.querySelector('.cc').value || 1), big: r.querySelector('.cb').checked })).filter(x => x.title);
@@ -746,11 +807,15 @@ function kidActions(p) {
     <label>Новый код входа (4 цифры)</label><div class="inline"><input id="kc" inputmode="numeric" maxlength="4" placeholder="1234"><button class="btn p" id="kcS">Сохранить</button></div>
     <label>Жетоны (+/−)</label><div class="inline"><input id="kt" type="number" placeholder="например 20 или -10"><button class="btn p" id="ktS">Применить</button></div>
     <label>Билеты на самолёт (+/−)</label><div class="inline"><input id="kb" type="number" placeholder="1"><button class="btn p" id="kbS">Применить</button></div>
+    <label>⭐ Звёзды добрых дел (+/−), сейчас ${p.stars || 0}</label><div class="inline"><input id="ks" type="number" placeholder="например 5 или -3"><button class="btn p" id="ksS">Применить</button></div>
+    <label>🔓 Открыть край вручную</label><div class="inline"><select id="kr" style="flex:1">${REGS().filter(R => !(p.unlocked || []).includes(R.id)).map(R => `<option value="${R.id}">${R.e || ''} ${esc(R.n)} (${R.need} ⭐)</option>`).join('') || '<option value="">все края открыты</option>'}</select><button class="btn p" id="krS">Открыть</button></div>
     <button class="btn" id="kHome" style="margin-top:14px;width:100%">Вернуть домой (${esc(nname(p.home))}) и отменить поездку</button>
     <button class="btn" style="margin-top:8px;width:100%" onclick="document.getElementById('modal').click()">Закрыть</button>`);
   $('#kcS').onclick = async () => { const v = $('#kc').value; if (!/^\d{4}$/.test(v)) return alert('Ровно 4 цифры'); if (await adm('set_code', { player: p.id, code: v })) { closeSheet(); alert(`Новый код для ${p.name}: ${v}`); } };
   $('#ktS').onclick = async () => { if (await adm('adjust', { player: p.id, tokens: +$('#kt').value || 0 })) closeSheet(); };
   $('#kbS').onclick = async () => { if (await adm('adjust', { player: p.id, tickets: +$('#kb').value || 0 })) closeSheet(); };
+  $('#ksS').onclick = async () => { if (await adm('stars', { player: p.id, n: +$('#ks').value || 0 })) closeSheet(); };
+  $('#krS').onclick = async () => { const v = $('#kr').value; if (v && confirm('Открыть край для ' + p.name + '?') && await adm('unlock', { player: p.id, region: v })) closeSheet(); };
   $('#kHome').onclick = async () => { if (confirm('Точно?') && await adm('move_home', { player: p.id })) closeSheet(); };
 }
 
@@ -812,13 +877,14 @@ function openRace() {
 }
 function raceDest(opp) {
   const here = ME.location;
-  const list = PUB.nodes.filter(n => n.id !== here).map(n => ({ n, r: shortest(here, n.id) })).filter(x => x.r).sort((a, b) => (b.n.id === 'KOR') - (a.n.id === 'KOR') || a.r.km - b.r.km);
+  const both = id => isOpen(id) && isOpen(id, pl(opp));
+  const list = PUB.nodes.filter(n => n.id !== here && both(n.id)).map(n => ({ n, r: shortest(here, n.id, both) })).filter(x => x.r).sort((a, b) => (b.n.id === 'KOR') - (a.n.id === 'KOR') || a.r.km - b.r.km);
   sheet(`<h2>⚔️ Куда гонка?</h2><div class="muted">Вы с ${pl(opp).avatar} ${esc(pl(opp).name)} поедете по одной дороге.</div>` + list.map(({ n, r }) => `<button class="opt" data-to="${n.id}"><span class="i">${n.id === 'KOR' ? '🏡' : '🏁'}</span><span><b>${esc(n.name)}</b><small>${fmt(r.km)} км · ${r.path.map(nname).map(esc).join(' → ')}</small></span></button>`).join('') + `<button class="btn" style="width:100%;margin-top:12px" id="raceBack">← Назад</button>`);
   $('#raceBack').onclick = openRace;
   $('#sheet').querySelectorAll('[data-to]').forEach(b => b.onclick = () => raceTransport(opp, b.dataset.to));
 }
 function raceTransport(opp, to) {
-  const r = shortest(ME.location, to), O = pl(opp);
+  const O = pl(opp), r = shortest(ME.location, to, id => isOpen(id) && isOpen(id, O));
   sheet(`<h2>⚔️ На чём?</h2><div class="muted">Транспорт одинаковый для обоих. Младшим нужно меньше тапов, а скорость в км у всех честная.</div>` + RACE_TR.map(id => {
     const T = Z.TRANSPORT[id];
     const est = p => T.perTap ? `${fmt(Math.ceil(r.km / (T.perTap * mult(p.age))))} тапов` : `${Math.ceil(r.km / (T.perSec * mult(p.age)) / 60)} мин`;
@@ -917,10 +983,97 @@ $('#chatIn').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shif
 $('#chatSend').onclick = chatSend; $('#chatClose').onclick = chatClose;
 for (const id of ['kidChat', 'famChat', 'adminChat']) $('#' + id).onclick = chatOpen;
 
+/* ---------- ⭐ добрые дела: звёзды открывают новые края ---------- */
+const DEED_ORDER = ['grade', 'read', 'book', 'home', 'good', 'sport'];
+const DEED_HINT = { grade: 'Оценка 5 или 4 в школе сегодня', read: 'Сколько страниц прочитал(а) — 10 страниц = 1 ⭐', book: 'Дочитал(а) книгу до конца', home: 'Уборка, посуда, помощь маме и папе', good: 'Помог(ла) человеку: соседу, младшим, Ата и Әже…', sport: 'Тренировка, секция, зарядка' };
+function deedPts(c, cat) { return cat === 'grade' ? `5 = ${c.p5} ⭐, 4 = ${c.p4} ⭐` : cat === 'read' ? `${c.per} стр. = 1 ⭐` : `${c.p} ⭐`; }
+function deedTxt(r) {
+  const it = r.item || {};
+  const am = it.cat === 'grade' ? ` «${it.amount}»` : it.cat === 'read' ? `: ${it.amount} стр.` : '';
+  return `${esc(it.e || '⭐')} ${esc(it.title || 'Доброе дело')}${am} · +${it.points} ⭐${it.comment ? ` — «${esc(it.comment)}»` : ''}`;
+}
+const nextReg = who => REGS().filter(R => !(who.unlocked || []).includes(R.id)).sort((a, b) => a.need - b.need)[0] || null;
+let DEED_SEL = null;
+function renderDeeds() {
+  const el = $('#tab-deeds'); if (!el || !ME) return;
+  const D = DEEDS(), cats = D.cats || {}, stars = +ME.stars || 0, nx = nextReg(ME), today = ME.deeds_today || {}, nToday = +ME.deeds_n_today || 0, maxDay = D.max_day || 10;
+  const prev = REGS().filter(R => (ME.unlocked || []).includes(R.id)).reduce((m, R) => Math.max(m, +R.need), 0);
+  let h = `<div class="card deeds-hero"><h3>⭐ Добрые дела — Жақсы істер</h3><div class="starbig">${stars} ⭐</div>`;
+  h += nx ? `<div class="muted">До края <b>${nx.e || ''} ${esc(nx.n)}</b> (${regCities(nx.id).map(n => esc(n.name)).join(', ')}) — ещё <b>${Math.max(0, nx.need - stars)} ⭐</b></div><div class="bar"><i style="width:${Math.min(100, Math.max(0, 100 * (stars - prev) / Math.max(1, nx.need - prev)))}%"></i></div>`
+    : `<div class="muted">Все края открыты — весь Казахстан твой! 🇰🇿</div>`;
+  h += `<div class="muted" style="margin-top:6px">Делай хорошие дела в жизни — отмечай их здесь. Звёзды засчитываются, когда <b>родители подтвердят</b>. За звёзды открываются новые города на карте.</div></div>`;
+  h += `<div class="card"><h3>✍️ Что я сделал(а) сегодня?</h3><div class="muted">Сегодня отмечено: ${nToday}/${maxDay}</div><div class="deedgrid">` + DEED_ORDER.filter(k => cats[k]).map(k => {
+    const c = cats[k], used = +today[k] || 0, full = c.cap && used >= c.cap;
+    return `<button class="deedbtn${DEED_SEL === k ? ' on' : ''}${full ? ' full' : ''}" data-deed="${k}"><span class="i">${esc(c.e)}</span><b>${esc(c.t)}</b><small>${deedPts(c, k)}${c.cap ? ` · сегодня ${used}/${c.cap} ⭐` : ''}</small></button>`;
+  }).join('') + `</div><div id="deedForm"></div></div>`;
+  const mine = REQS.filter(r => r.kind === 'deed');
+  h += `<div class="card"><h3>🧾 Мои добрые дела</h3>${mine.length ? mine.map(r => `<div class="row"><div class="grow"><b>${deedTxt(r)}</b><small>${new Date(r.created_at).toLocaleDateString('ru-RU')}${r.note ? ' · ' + esc(r.note) : ''}</small></div>${stTag(r)}</div>`).join('') : '<div class="muted">Пока пусто — начни с одного доброго дела 🙂</div>'}</div>`;
+  h += `<div class="card"><h3>🗺️ Края Казахстана</h3><div class="muted">Сначала открыт юг: Алматы, Кордай, Тараз, Астана и дороги между ними.</div>` + REGS().slice().sort((a, b) => a.need - b.need).map(R => {
+    const on = (ME.unlocked || []).includes(R.id);
+    return `<div class="row reg${on ? ' on' : ''}"><div class="av">${on ? R.e || '✅' : '🔒'}</div><div class="grow"><b>${esc(R.n)}</b><small>${regCities(R.id).map(n => esc(n.name)).join(', ')}</small></div>${on ? '<span class="tag ok">открыт</span>' : `<span class="tag">${R.need} ⭐</span>`}</div>`;
+  }).join('') + `</div>`;
+  el.innerHTML = h;
+  el.querySelectorAll('[data-deed]').forEach(b => b.onclick = () => { DEED_SEL = b.dataset.deed; renderDeeds(); $('#deedForm').scrollIntoView({ behavior: 'smooth', block: 'nearest' }); });
+  if (DEED_SEL && cats[DEED_SEL]) deedForm(DEED_SEL, cats[DEED_SEL]);
+}
+function deedForm(k, c) {
+  let amount = k === 'grade' ? 5 : null;
+  const f = $('#deedForm');
+  f.innerHTML = `<div class="deedform"><b>${esc(c.e)} ${esc(c.t)}</b><div class="muted">${DEED_HINT[k] || ''}</div>
+    ${k === 'grade' ? `<div class="inline" style="margin-top:8px"><button class="btn gradebtn on" data-g="5">5 — отлично (${c.p5} ⭐)</button><button class="btn gradebtn" data-g="4">4 — хорошо (${c.p4} ⭐)</button></div>` : ''}
+    ${k === 'read' ? `<label>Сколько страниц?</label><input id="deedPages" type="number" inputmode="numeric" min="5" max="300" placeholder="например, 20">` : ''}
+    <label>Пара слов (необязательно)</label><textarea id="deedCm" maxlength="200" rows="2" placeholder="${k === 'grade' ? 'по какому предмету?' : k === 'read' ? 'какая книга?' : 'что именно сделал(а)?'}"></textarea><small class="muted" id="deedCnt">0/200</small>
+    <button class="big-btn teal" id="deedSend">Отправить родителям ⭐</button></div>`;
+  f.querySelectorAll('[data-g]').forEach(b => b.onclick = () => { amount = +b.dataset.g; f.querySelectorAll('[data-g]').forEach(x => x.classList.toggle('on', x === b)); });
+  $('#deedCm').oninput = () => $('#deedCnt').textContent = $('#deedCm').value.length + '/200';
+  $('#deedSend').onclick = async () => {
+    if (k === 'read') { amount = +$('#deedPages').value; if (!(amount >= 5 && amount <= 300)) return toast('Страниц — от 5 до 300'); }
+    const btn = $('#deedSend'); btn.disabled = true;
+    try {
+      const r = await rpc('zhol_deed', { p: SESSION.id, code: SESSION.code, cat: k, amount, comment: $('#deedCm').value.slice(0, 200) });
+      if (!r.ok) { btn.disabled = false; return toast(errText(r.error), 2600); }
+      ME = r.me; REQS = r.requests; DEED_SEL = null; toast('Отправлено родителям! Жарайсың 👏', 2400); renderApp();
+    } catch (e) { btn.disabled = false; toast(e.offline ? 'Нет сети' : e.message); }
+  };
+}
+// праздник: открылся новый край
+function unlockCheer() {
+  if (!ME) return;
+  const key = 'zhol_unl_' + ME.id, seen = LS.get(key, null), now = ME.unlocked || [];
+  if (seen === null) { LS.set(key, now); return; }
+  const fresh = now.filter(x => !seen.includes(x));
+  if (!fresh.length) { if (now.length !== seen.length) LS.set(key, now); return; }
+  if (T || !vis('app')) return;
+  LS.set(key, now);
+  const names = fresh.map(r => regCities(r).map(n => n.name).join(', ')).join(', ');
+  sheet(`<div class="arr"><div style="font-size:56px">🔓✨</div><h2>Открыт новый край!</h2><p><b>${fresh.map(r => esc((regInfo(r).e || '') + ' ' + regInfo(r).n)).join(', ')}</b></p><p>Теперь можно поехать: ${esc(names)}. Жарайсың, ${esc(ME.name)}! ⭐</p><button class="big-btn teal" id="unlOk">Ура! Смотреть карту 🗺️</button></div>`);
+  $('#unlOk').onclick = () => { closeSheet(); setTab('map'); };
+}
+// админ: очки и пороги
+function deedAdminCard(cfg) {
+  const D = cfg.deeds || { cats: {}, regions: [] }, C = D.cats || {};
+  const inp = (k, f, v) => `<input class="dcf" data-k="${k}" data-f="${f}" type="number" min="0" value="${v ?? ''}" style="max-width:70px">`;
+  return `<div class="card"><h3>⭐ Добрые дела: очки и пороги</h3><div class="muted">Звёзды дети получают после подтверждения родителей. «Лимит» — максимум звёзд по этому делу в день.</div>
+    ${DEED_ORDER.filter(k => C[k]).map(k => { const c = C[k]; return `<div class="inline" style="margin-top:6px;flex-wrap:wrap"><b style="min-width:150px">${esc(c.e)} ${esc(c.t)}</b>${k === 'grade' ? `5 → ${inp(k, 'p5', c.p5)} 4 → ${inp(k, 'p4', c.p4)}` : k === 'read' ? `стр. за 1 ⭐ ${inp(k, 'per', c.per)}` : `⭐ ${inp(k, 'p', c.p)}`} лимит ${inp(k, 'cap', c.cap)}</div>`; }).join('')}
+    <label>Максимум дел в день на ребёнка</label><input id="dMax" type="number" min="1" max="30" value="${D.max_day || 10}">
+    <h4 style="margin:12px 0 4px">Пороги краёв (⭐ всего)</h4>${(D.regions || []).map(R => `<div class="inline" style="margin-top:4px"><span style="flex:1">${R.e || ''} ${esc(R.n)} <small class="muted">${regCities(R.id).map(n => esc(n.name)).join(', ')}</small></span><input class="drn" data-r="${R.id}" type="number" min="0" value="${R.need}" style="max-width:80px"></div>`).join('')}
+    <button class="big-btn teal" id="dSave">Сохранить</button></div>`;
+}
+function bindDeedAdmin(cfg) {
+  const b = $('#dSave'); if (!b) return;
+  b.onclick = () => {
+    const D = JSON.parse(JSON.stringify(cfg.deeds || { cats: {}, regions: [] }));
+    document.querySelectorAll('.dcf').forEach(i => { const v = i.value === '' ? null : Math.max(0, Math.round(+i.value)); if (v !== null) D.cats[i.dataset.k][i.dataset.f] = i.dataset.f === 'per' ? Math.max(1, v) : v; });
+    document.querySelectorAll('.drn').forEach(i => { const R = D.regions.find(r => r.id === i.dataset.r); if (R) R.need = Math.max(0, Math.round(+i.value || 0)); });
+    D.max_day = Math.min(30, Math.max(1, Math.round(+$('#dMax').value || 10)));
+    adm('set_config', { config: { deeds: D } });
+  };
+}
+
 /* ---------- навигация: Домой и кнопка «назад» ---------- */
 function setTab(t) {
   TAB = t; $('#tabs').querySelectorAll('button').forEach(x => x.classList.toggle('on', x.dataset.tab === t));
-  for (const k of ['map', 'family', 'ach', 'bank']) $('#tab-' + k).classList.toggle('hidden', k !== t);
+  for (const k of ['map', 'family', 'ach', 'bank', 'deeds']) $('#tab-' + k).classList.toggle('hidden', k !== t);
   window.scrollTo(0, 0);
 }
 const vis = id => !$('#' + id).classList.contains('hidden');

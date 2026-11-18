@@ -225,3 +225,35 @@ body.chat-on{overflow:hidden}
 .card .empty,.chat-list .empty{border-color:#d9ccb3;color:var(--muted);background:rgba(0,0,0,.02)}
 .toast{z-index:50}
 @media(min-width:700px){.row.rq{flex-wrap:nowrap}.rqbtns{width:auto;margin-top:0;flex-wrap:nowrap}}
+
+/* --- вся карта Казахстана, замки, добрые дела --- */
+.mapwrap{position:relative;overflow:auto;-webkit-overflow-scrolling:touch;max-height:74vh}
+.mapwrap.zoom svg{width:240%!important;max-height:none!important}
+#map,#pmap{width:100%;height:auto;display:block}
+.land{fill:#f3dfb4;stroke:#c9a46a;stroke-width:2;stroke-linejoin:round}
+.kgz{fill:#e7e1cf;stroke:#c8bda4;stroke-width:1.2}
+.lake{fill:#9fd0ea;stroke:#7ab6d6;stroke-width:1}
+.geo-lbl{font-size:11px;fill:#5b8fab;font-style:italic}
+.map-note{font-size:11px;fill:#8a6a3a}
+.road.lk{stroke:#cfc6b4;stroke-width:3;stroke-dasharray:2 5}
+.km-lbl.lk{fill:#b5ab98;font-weight:500}
+.node.locked circle{fill:#e3ded3;stroke:#a69f90;stroke-width:1.6}
+.node.locked text{fill:#9a927f;font-weight:600}
+.node .lock{font-size:8px;stroke:none!important}
+.node circle.hit{fill:transparent!important;stroke:none!important;cursor:pointer}
+.node.town text{font-size:11px}
+.zoom-btn{display:block;margin:8px auto 0;background:#fff;border:2px solid #e5d3ad;border-radius:999px;padding:6px 14px;font:700 13px Montserrat,sans-serif;color:#5a4320;cursor:pointer}
+@media(min-width:900px){#tab-map{grid-template-columns:1fr!important}#tab-map .panel{max-width:none}}
+.deeds-hero .starbig{font-size:34px;font-weight:800;margin:4px 0}
+.deedgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+@media(min-width:700px){.deedgrid{grid-template-columns:repeat(3,1fr)}}
+.deedbtn{display:flex;flex-direction:column;align-items:flex-start;text-align:left;gap:2px;padding:10px;border-radius:14px;border:2px solid #eadcbc;background:#fffaf0;font:inherit;color:inherit;cursor:pointer}
+.deedbtn .i{font-size:26px}.deedbtn b{font-size:13px;line-height:1.2}.deedbtn small{font-size:11px;color:#8a7350}
+.deedbtn.on{border-color:var(--terra,#d4552b);background:#fff1e6}
+.deedbtn.full{opacity:.5}
+.deedform{margin-top:12px;padding:12px;border-radius:14px;background:#fff;border:2px dashed #eadcbc}
+.deedform textarea{width:100%;box-sizing:border-box;font:inherit;border-radius:10px;border:1px solid #ddd;padding:8px}
+.gradebtn.on{background:var(--terra,#d4552b);color:#fff;border-color:transparent}
+.lockbox{margin:12px 0;padding:12px;border-radius:14px;background:#fff;text-align:center}
+.row.reg:not(.on){opacity:.75}
+.opt.off-lock{opacity:.8;background:#f2eee6}
