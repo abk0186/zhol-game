@@ -1082,8 +1082,8 @@ function chatId() {
   return null;
 }
 const seenKey = c => 'zhol_chat_seen_' + c.who + '_' + c.uid;
-function chatBadge(n) {
-  for (const el of document.querySelectorAll('.chatnb')) { el.textContent = n > 9 ? '9+' : n; el.classList.toggle('hidden', !n); }
+function chatBadge(n, at = 0) {
+  for (const el of document.querySelectorAll('.chatnb')) { el.textContent = at ? '@' + (at > 9 ? '9+' : at) : n > 9 ? '9+' : n; el.classList.toggle('hidden', !n && !at); el.classList.toggle('at', !!at); }
 }
 async function chatFetch(c, after = 0) { return rpc('zhol_chat', { who: c.who, uid: c.uid, code: c.code, after }); }
 async function chatTick(force) {
@@ -1092,7 +1092,8 @@ async function chatTick(force) {
     const seen = LS.get(seenKey(c), null);
     try { CHAT.busy = true; const r = await chatFetch(c, seen ?? 0); if (!r.ok) return;
       if (seen === null) { LS.set(seenKey(c), r.last); return chatBadge(0); }
-      chatBadge(r.messages.filter(m => !m.mine && !m.deleted && m.kind !== 'system').length);
+      const nm = r.messages.filter(m => !m.mine && !m.deleted && m.kind !== 'system');
+      chatBadge(nm.length, nm.filter(m => m.at_me).length);
     } catch (e) {} finally { CHAT.busy = false; }
     return;
   }
@@ -1101,8 +1102,8 @@ async function chatTick(force) {
 setInterval(() => { if (!CHAT.open && !vis('trip')) chatTick(); }, 20000);
 function chatApply(r) {
   const c = chatId(); if (!c) return;
-  CHAT.msgs = r.messages; CHAT.mod = r.mod; CHAT.ro = !!r.ro; document.querySelector('.chat-in').classList.toggle('hidden', CHAT.ro); CHAT.last = r.last; LS.set(seenKey(c), r.last); chatBadge(0);
-  const sig = r.messages.map(m => m.id + (m.deleted ? 'd' : '')).join(',') + CHAT.mod;
+  CHAT.msgs = r.messages; CHAT.mod = r.mod; CHAT.ro = !!r.ro; document.querySelector('.chat-in').classList.toggle('hidden', CHAT.ro); CHAT.last = r.last; LS.set(seenKey(c), r.last); chatBadge(0); CHAT.people = r.people || []; CHAT.rx = r.rx || {};
+  const sig = r.messages.map(m => m.id + (m.deleted ? 'd' : '')).join(',') + CHAT.mod + JSON.stringify(CHAT.rx);
   if (sig === CHAT.sig) return; CHAT.sig = sig; chatRender();
 }
 const ctime = s => { const d = new Date(s), t = d.toLocaleTimeString('ru-RU', { timeZone: 'Asia/Almaty', hour: '2-digit', minute: '2-digit' }); return new Date().toDateString() === d.toDateString() ? t : d.toLocaleDateString('ru-RU', { timeZone: 'Asia/Almaty', day: 'numeric', month: 'short' }) + ' ' + t; };
@@ -1110,9 +1111,12 @@ function chatRender() {
   const L = $('#chatList'), atBottom = L.scrollHeight - L.scrollTop - L.clientHeight < 80;
   const MS = CHAT.msgs.filter(m => !(m.kind === 'system' && m.deleted));
   L.innerHTML = MS.length ? MS.map(m => m.kind === 'system' ? `<div class="cm sys"><span>${esc(m.text)}</span><small>${ctime(m.at)}</small>${CHAT.mod ? `<button class="cdel" data-cdel="${m.id}" title="Удалить">🗑</button>` : ''}</div>` :
-    `<div class="cm${m.mine ? ' mine' : ''}"><div class="cav" style="background:${m.color || (m.kind === 'admin' ? '#13283d' : '#f5a524')}">${m.avatar}</div><div class="cb"><div class="cn">${esc(m.name)} <small>${ctime(m.at)}</small>${CHAT.mod && !m.deleted ? `<button class="cdel" data-cdel="${m.id}" title="Удалить">🗑</button>` : ''}</div><div class="ct${m.deleted ? ' del' : ''}">${m.deleted ? 'сообщение удалено' : esc(m.text)}</div></div></div>`).join('')
+    `<div class="cm${m.mine ? ' mine' : ''}${m.at_me ? ' atme' : ''}" data-mid="${m.id}"><div class="cav" style="background:${m.color || (m.kind === 'admin' ? '#13283d' : '#f5a524')}">${m.avatar}</div><div class="cb"><div class="cn">${esc(m.name)} <small>${ctime(m.at)}</small>${CHAT.mod && !m.deleted ? `<button class="cdel" data-cdel="${m.id}" title="Удалить">🗑</button>` : ''}</div><div class="ct${m.deleted ? ' del' : ''}">${m.deleted ? 'сообщение удалено' : chatText(m)}</div>${m.deleted ? '' : rxHtml(m)}</div></div>`).join('')
     : '<div class="empty">Пока тихо. Напиши первым — привет всей семье! 👋</div>';
-  L.querySelectorAll('[data-cdel]').forEach(b => b.onclick = () => chatDelete(+b.dataset.cdel));
+  L.querySelectorAll('[data-cdel]').forEach(b => b.onclick = e => { e.stopPropagation(); chatDelete(+b.dataset.cdel); });
+  L.querySelectorAll('.cm[data-mid] .cb').forEach(b => b.onclick = e => { if (e.target.closest('button')) return; const id = +b.closest('.cm').dataset.mid; CHAT.bar = CHAT.bar === id ? 0 : id; CHAT.who = null; chatRender(); });
+  L.querySelectorAll('[data-rq]').forEach(b => b.onclick = e => { e.stopPropagation(); const [id, em] = b.dataset.rq.split('|'); CHAT.bar = 0; chatReact(+id, em); });
+  L.querySelectorAll('[data-rp]').forEach(b => b.onclick = e => { e.stopPropagation(); const [id, em] = b.dataset.rp.split('|'); CHAT.who = CHAT.who && CHAT.who.id === +id && CHAT.who.e === em ? null : { id: +id, e: em }; CHAT.bar = 0; chatRender(); });
   if (atBottom || !CHAT.rendered) L.scrollTop = L.scrollHeight; CHAT.rendered = true;
 }
 function chatOpen() {
@@ -1124,11 +1128,43 @@ function chatOpen() {
   if (!matchMedia('(pointer:coarse)').matches) $('#chatIn').focus();
 }
 function chatClose() { if (!CHAT.open) return; CHAT.open = false; clearInterval(CHAT.timer); $('#chat').classList.add('hidden'); document.body.classList.remove('chat-on'); $('#chatIn').blur(); }
+// @упоминания и реакции
+const RX = ['👍', '❤️', '😂', '😮', '👏', '🔥', '🙏', '🎉'];
+ERR.test_scope = 'Тестовый вход может реагировать только на тестовые сообщения'; ERR.no_message = 'Сообщение уже недоступно'; ERR.bad_emoji = 'Такой реакции нет';
+function chatText(m) {
+  let h = esc(m.text); if (!m.mentions?.length) return h;
+  const names = (CHAT.people || []).filter(p => m.mentions.some(x => x.kind === p.kind && x.id === p.id)).map(p => p.name).sort((a, b) => b.length - a.length);
+  for (const n of names) h = h.split(esc('@' + n)).join(`<b class="at">@${esc(n)}</b>`);
+  return h;
+}
+function rxHtml(m) {
+  const list = CHAT.rx?.[m.id] || [], canR = !CHAT.ro;
+  let h = list.length ? `<div class="rx">${list.map(r => `<button class="rxp${r.mine ? ' mine' : ''}" data-rp="${m.id}|${r.e}" title="${esc(r.who.join(', '))}">${r.e} ${r.n}</button>`).join('')}</div>` : '';
+  if (CHAT.who && CHAT.who.id === m.id) { const r = list.find(x => x.e === CHAT.who.e); if (r) h += `<div class="rxwho">${r.e} ${esc(r.who.join(', '))}${canR ? ` <button class="enlink" data-rq="${m.id}|${r.e}">${r.mine ? 'убрать мою' : '+1'}</button>` : ''}</div>`; }
+  if (canR && CHAT.bar === m.id) h += `<div class="rqbar">${RX.map(e => `<button data-rq="${m.id}|${e}" class="${list.some(r => r.e === e && r.mine) ? 'on' : ''}">${e}</button>`).join('')}</div>`;
+  return h;
+}
+async function chatReact(id, emoji) {
+  const c = chatId(); if (!c) return;
+  try { const r = await rpc('zhol_chat_react', { who: c.who, uid: c.uid, code: c.code, id, emoji, after: 0 }); if (!r.ok) return toast(errText(r.error), 2500); chatApply(r); }
+  catch (e) { toast(e.offline ? 'Нет сети' : e.message); }
+}
+function atToken() { const el = $('#chatIn'), before = el.value.slice(0, el.selectionStart ?? el.value.length), m = before.match(/(^|\s)@([^@\n]{0,20})$/); return m ? { q: m[2], start: before.length - m[2].length - 1 } : null; }
+function atPick() {
+  const box = $('#atPick'), t = atToken(), c = chatId();
+  const list = t ? (CHAT.people || []).filter(p => !(c && p.kind === c.who && p.id === c.uid) && p.name.toLowerCase().includes(t.q.toLowerCase().trim())).slice(0, 8) : [];
+  if (!list.length) { box.classList.add('hidden'); box.innerHTML = ''; return; }
+  box.innerHTML = list.map((p, i) => `<button data-at="${i}"><span>${p.avatar}</span>${esc(p.name)}</button>`).join(''); box.classList.remove('hidden');
+  box.querySelectorAll('[data-at]').forEach(b => b.onpointerdown = e => { e.preventDefault(); const p = list[+b.dataset.at], el = $('#chatIn'), tk = atToken(); if (!tk) return;
+    const end = el.selectionStart ?? el.value.length; el.value = el.value.slice(0, tk.start) + '@' + p.name + ' ' + el.value.slice(end); const pos = tk.start + p.name.length + 2; el.setSelectionRange(pos, pos); el.focus(); chatCount(); atPick(); });
+}
 async function chatSend() {
   const c = chatId(), inp = $('#chatIn'), t = inp.value.trim(); if (!c || !t) return;
   if (t.length > 300) return toast(ERR.too_long);
-  $('#chatSend').disabled = true;
-  try { const r = await rpc('zhol_chat_send', { who: c.who, uid: c.uid, code: c.code, msg: t, after: 0 }); if (!r.ok) return toast(errText(r.error), 2500); inp.value = ''; chatCount(); CHAT.rendered = false; chatApply(r); $('#chatList').scrollTop = 1e9; }
+  const mentions = (CHAT.people || []).filter(p => t.includes('@' + p.name)).map(p => ({ kind: p.kind, id: p.id }));
+  $('#chatSend').disabled = true; $('#atPick').classList.add('hidden');
+  try { const r = await rpc('zhol_chat_send', { who: c.who, uid: c.uid, code: c.code, msg: t, after: 0, mentions });
+ if (!r.ok) return toast(errText(r.error), 2500); inp.value = ''; chatCount(); CHAT.rendered = false; chatApply(r); $('#chatList').scrollTop = 1e9; }
   catch (e) { toast(e.offline ? 'Нет сети' : e.message); }
   finally { $('#chatSend').disabled = false; }
 }
@@ -1139,7 +1175,8 @@ async function chatDelete(id) {
 function chatCount() { const n = $('#chatIn').value.length; $('#chatCnt').textContent = n > 250 ? (300 - n) : ''; $('#chatIn').style.height = 'auto'; $('#chatIn').style.height = Math.min(120, $('#chatIn').scrollHeight) + 'px'; }
 function chatFit() { const vv = window.visualViewport, el = $('#chat'); if (!vv || !CHAT.open) return; el.style.height = vv.height + 'px'; el.style.top = vv.offsetTop + 'px'; }
 if (window.visualViewport) { visualViewport.addEventListener('resize', () => { chatFit(); if (CHAT.open) $('#chatList').scrollTop = 1e9; }); visualViewport.addEventListener('scroll', chatFit); }
-$('#chatIn').addEventListener('input', chatCount);
+$('#chatIn').addEventListener('input', () => { chatCount(); atPick(); });
+$('#chatIn').addEventListener('click', atPick); $('#chatIn').addEventListener('blur', () => setTimeout(() => $('#atPick').classList.add('hidden'), 150));
 $('#chatIn').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && !matchMedia('(pointer:coarse)').matches) { e.preventDefault(); chatSend(); } });
 $('#chatSend').onclick = chatSend; $('#chatClose').onclick = chatClose;
 for (const id of ['kidChat', 'famChat', 'adminChat']) $('#' + id).onclick = chatOpen;

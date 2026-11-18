@@ -280,3 +280,19 @@ body.chat-on{overflow:hidden}
 @media(max-height:760px){.encard.mini .enex{display:none}}
 .enin{margin-bottom:auto}.enin .encard{margin-top:0}
 .encard.kk .enword b{color:#0f7a8a}.enlangs{flex-wrap:wrap;gap:6px}.enlangs .btn{flex:1;min-width:110px}
+/* чат: @упоминания и реакции */
+.ct .at{color:#0b6b8a;background:#dff2f8;border-radius:6px;padding:0 3px;font-weight:800}
+.cm.atme .cb{box-shadow:0 0 0 2px #f5a524,0 1px 2px rgba(0,0,0,.08)}
+.chatnb.at{background:#e0603a}
+.atpick{position:absolute;left:10px;right:70px;bottom:100%;margin-bottom:6px;background:#fff;border-radius:14px;box-shadow:0 6px 22px rgba(0,0,0,.18);max-height:260px;overflow-y:auto;z-index:2;padding:4px}
+.atpick.hidden{display:none}
+.atpick button{display:flex;gap:8px;align-items:center;width:100%;text-align:left;padding:9px 10px;border-radius:10px;font-weight:700;font-size:15px;background:none;color:var(--ink)}
+.atpick button:hover,.atpick button:active{background:#f3ecdf}.atpick button span{font-size:20px}
+.cb{cursor:pointer}
+.rx{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}
+.rxp{background:#f3ecdf;border-radius:99px;padding:2px 8px;font-size:13px;font-weight:700;color:var(--ink);min-height:26px}
+.rxp.mine{background:#cdeedb;box-shadow:inset 0 0 0 1.5px #2fae64}
+.rxwho{font-size:12px;color:var(--muted);margin-top:4px}
+.rqbar{display:flex;flex-wrap:wrap;gap:2px;margin-top:6px;background:#fffdf8;border-radius:99px;padding:3px;box-shadow:0 2px 8px rgba(0,0,0,.12)}
+.rqbar button{font-size:21px;width:36px;height:36px;border-radius:50%;background:none}
+.rqbar button.on{background:#cdeedb}
