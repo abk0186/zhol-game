@@ -1,6 +1,7 @@
 // Жол: дорога к Ата и Әже — данные игры (карта, транспорт, вопросы, достижения)
 window.ZHOL = {
   SUPABASE_URL: 'https://iwpmrordpxrkxlpaxutx.supabase.co',
+  TEST_KID: 'ztest_asset', TEST_FAM: 'ztest',
   SUPABASE_KEY: 'sb_publishable_AbdSHjsV3Esw8ZwLlyzktA_2bScyiMe',
 
   // Карта всего Казахстана: контур и города по координатам OSM (равнопромежуточная проекция), юг-восток вокруг Алматы и Кордая разнесён вручную — схема, не в масштабе.

@@ -127,10 +127,11 @@ function codePad(title, sub, { min = 4, max = 4, onSubmit }) {
 }
 
 /* ---------- вход ---------- */
+const isTest = id => String(id || '').startsWith('ztest');
 async function loadPub() { const s = await rpc('zhol_public_state', LS.get('zhol_test', false) ? { test: true } : {}); PUB = s; LS.set('zhol_pub', s); return s; }
 function renderKids() {
   if (!PUB) { $('#kids').innerHTML = '<div class="muted" style="color:#fff">Загрузка…</div>'; return; }
-  $('#kids').innerHTML = PUB.players.map(p => `<button class="kid" data-id="${p.id}"><div class="av" style="background:${p.color}22">${p.avatar}</div><b>${esc(p.name)}</b><small>${p.age} лет · ${esc(p.school)}</small><br><span class="where">${p.trip ? '🛣️ в пути' : '📍 ' + esc(nname(p.location))}</span></button>`).join('');
+  $('#kids').innerHTML = PUB.players.filter(p => !isTest(p.id)).map(p => `<button class="kid" data-id="${p.id}"><div class="av" style="background:${p.color}22">${p.avatar}</div><b>${esc(p.name)}</b><small>${p.age} лет · ${esc(p.school)}</small><br><span class="where">${p.trip ? '🛣️ в пути' : '📍 ' + esc(nname(p.location))}</span></button>`).join('');
   $('#kids').querySelectorAll('.kid').forEach(b => b.onclick = () => {
     const p = PUB.players.find(x => x.id === b.dataset.id);
     codePad(`${p.avatar} Сәлем, ${esc(p.name)}!`, 'Введи свой код из 4 цифр', { onSubmit: async (code, fail) => {
@@ -157,7 +158,7 @@ $('#toParent').onclick = () => codePad('Администратор', 'Введи
   try { const r = await rpc('zhol_admin', { pin, action: 'overview', payload: {} }); if (!r.ok) return fail(errText(r.error)); PIN = pin; ADMIN = r; closeSheet(); show('admin'); renderAdmin(); setTimeout(() => chatTick(), 300); }
   catch (e) { fail(e.offline ? 'Нет сети' : e.message); }
 } });
-$('#logout').onclick = () => { if (!confirm('Выйти? На этом устройстве нужно будет снова ввести код.')) return; LS.del('zhol_me'); SESSION = null; ME = null; chatClose(); chatBadge(0); show('login'); renderKids(); };
+$('#logout').onclick = () => { if (!confirm('Выйти? На этом устройстве нужно будет снова ввести код.')) return; if (isTest(SESSION?.id)) { LS.del('zhol_test'); loadPub().then(renderKids).catch(() => {}); } LS.del('zhol_me'); SESSION = null; ME = null; chatClose(); chatBadge(0); show('login'); renderKids(); };
 
 /* ---------- приложение ---------- */
 let pollT;
@@ -679,6 +680,28 @@ $('#toFamily').onclick = async () => {
   });
 };
 ERR.bad_fcode = 'Неверный код семьи';
+// 🧪 тестовый вход (для Асета): скрытый ребёнок и скрытая семья «Тест» — не видны детям, не входят в итоги, рейтинги и общий чат
+$('#toTest').onclick = () => {
+  sheet(`<h2>🧪 Тестовый вход</h2><div class="muted">Для проверки функций. Тестовый игрок не виден детям и родителям, не попадает в рейтинги, итоги семьи и общий чат; жарыс с настоящими детьми невозможен.</div>
+    <button class="opt" id="tKid"><span class="i">🧪</span><span><b>Тест (Асет) — как ребёнок</b><small>код из 4 цифр</small></span></button>
+    <button class="opt" id="tFam"><span class="i">👪</span><span><b>Семья «Тест» — как родитель</b><small>код из 6 цифр · подтверждать дела и запросы тестового, сброс прогресса</small></span></button>
+    <button class="btn" style="width:100%;margin-top:12px" onclick="document.getElementById('modal').click()">Отмена</button>`);
+  $('#tKid').onclick = () => codePad('🧪 Тест (Асет)', 'Код тестового ребёнка', { onSubmit: async (code, fail) => {
+    try { const r = await rpc('zhol_login', { p: Z.TEST_KID, code }); if (!r.ok) return fail(errText(r.error));
+      LS.set('zhol_test', true); SESSION = { id: Z.TEST_KID, code }; LS.set('zhol_mode', 'kid'); LS.set('zhol_me', SESSION); ME = r.me; REQS = r.requests; try { await loadPub(); } catch (e) {} closeSheet(); enterApp(); }
+    catch (e) { fail(e.offline ? 'Нет сети' : e.message); }
+  } });
+  $('#tFam').onclick = () => codePad('👪 Семья «Тест»', 'Код тестовой семьи (6 цифр)', { min: 6, max: 6, onSubmit: async (code, fail) => {
+    try { const r = await rpc('zhol_family_login', { f: Z.TEST_FAM, code }); if (!r.ok) return fail(errText(r.error === 'bad_code' ? 'bad_fcode' : r.error));
+      FAM = { id: Z.TEST_FAM, code }; LS.set('zhol_fam', FAM); LS.set('zhol_mode', 'family'); closeSheet(); enterFamily(r); }
+    catch (e) { fail(e.offline ? 'Нет сети' : e.message); }
+  } });
+};
+async function testReset() {
+  if (!FAM || !isTest(FAM.id) || !confirm('Сбросить весь прогресс тестового ребёнка? (км, жетоны, звёзды, края, запросы, его сообщения — домой в Астану)')) return;
+  try { const r = await rpc('zhol_test_reset', { f: FAM.id, code: FAM.code }); if (!r.ok) return toast(errText(r.error)); renderFamilyView(r); toast('Тестовый сброшен 🧪'); }
+  catch (e) { toast(e.offline ? 'Нет сети' : e.message); }
+}
 let famPoll;
 function enterFamily(r) {
   ME = null; show('parent'); renderFamilyView(r); setTimeout(() => chatTick(), 300);
@@ -739,7 +762,9 @@ function renderFamilyView(r) {
     ${raceCard(r.family.all ? null : c => r.kids.some(k => k.id === c.challenger || k.id === c.opponent))}
     <div class="card"><h3>🏆 Рейтинг недели</h3>${[...PUB.players].sort((a, b) => b.week_km - a.week_km || b.km_total - a.km_total).map((p, i) => `<div class="row"><div style="width:22px;font-weight:800">${i + 1}</div><div class="av" style="background:${p.color}33">${p.avatar}</div><div class="grow"><b>${esc(p.name)}</b><small>${Z.LEAGUES[p.league].name} · всего ${fmt(p.km_total)} км</small></div><b>${fmt(p.week_km)} км</b></div>`).join('')}</div>
     <div class="card"><h3>🕑 Последние события (${r.family.all ? 'все дети' : 'ваши дети'})</h3>${r.activity.length ? r.activity.slice(0, 15).map(a => `<div class="row"><div class="grow">${actLine(a, P)}<small>${fdt(a.at)}</small></div></div>`).join('') : '<div class="muted">Пока событий нет — дети ещё не выезжали.</div>'}</div></div>`;
+  if (isTest(r.family.id)) h = `<div class="card testcard"><h3>🧪 Тестовый режим</h3><div class="muted">Эта семья и ребёнок «Тест (Асет)» скрыты от всех: их нет у детей, в рейтингах, итогах и общем чате.</div><button class="big-btn" id="tReset">♻️ Сбросить тестового ребёнка</button></div>` + h;
   $('#parentMain').innerHTML = h;
+  if ($('#tReset')) $('#tReset').onclick = testReset;
   mapZoomInit(); renderMap($('#pmap'), null);
   $('#parentMain').querySelectorAll('[data-fdec]').forEach(b => b.onclick = () => famDecide(+b.dataset.fdec, b.dataset.s, b));
 }
@@ -868,7 +893,7 @@ async function raceRespond(id, accept, msg) { try { const r = await rpc('zhol_ch
 function openRace() {
   const here = ME.location;
   if (openCh(ME.id)) return toast('У тебя уже есть жарыс');
-  const opp = PUB.players.filter(p => p.id !== ME.id && !p.trip && p.location === here && !openCh(p.id));
+  const opp = PUB.players.filter(p => p.id !== ME.id && !p.trip && p.location === here && !openCh(p.id) && isTest(p.id) === isTest(ME.id));
   if (!opp.length) {
     return sheet(`<h2>⚔️ Жарыс</h2><p>Жарыс можно начать только с тем, кто сейчас в том же месте, что и ты (${esc(nname(here))}), и не в пути.</p><div class="muted">Где сейчас все:</div>${PUB.players.filter(p => p.id !== ME.id).map(p => `<div class="row"><div class="av">${p.avatar}</div><div class="grow"><b>${esc(p.name)}</b><small>${p.trip ? 'в пути → ' + esc(nname(p.trip.path.at(-1))) : '📍 ' + esc(nname(p.location))}</small></div></div>`).join('')}`);
   }

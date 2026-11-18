@@ -257,3 +257,5 @@ body.chat-on{overflow:hidden}
 .lockbox{margin:12px 0;padding:12px;border-radius:14px;background:#fff;text-align:center}
 .row.reg:not(.on){opacity:.75}
 .opt.off-lock{opacity:.8;background:#f2eee6}
+.link.tiny{margin-top:10px;font-size:12px;opacity:.5}
+.testcard{border:2px dashed #7a5cff}
