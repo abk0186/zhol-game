@@ -333,7 +333,7 @@ function openTrip() {
   T.inter = trip.challenge ? [] : interStops(trip); { const d0 = localDone(); T.acked = new Set(T.inter.filter(s => s.at < d0 - 0.05).map(s => s.n)); }
   $('#tripTok').textContent = ME.tokens;
   T.empty = T.tr === 'car' && T.fuel < 1;
-  buildEngine(); drawTrip();
+  buildEngine(); drawTrip(); enStart();
   T.timers.push(setInterval(flush, 2500), setInterval(tick, 100));
   if (trip.challenge) { T.timers.push(setInterval(racePoll, 4000)); racePoll(); }
   const ns = nextStop(); if (ns && localDone() >= ns.at - 0.01) stopPrompt(ns);
@@ -344,7 +344,7 @@ function closeTrip(toApp = true) {
   const left = { km: T.pendKm, taps: T.pendTaps, dur: performance.now() - T.lastFlush };
   if (T.pendKm > 0) { LS.set('zhol_pend_' + ME.id, left); flushNow(); }
   if (T.tr === 'car') setFuel(T.fuel);
-  T = null; closeSheet();
+  T = null; closeSheet(); enStop();
   if (toApp) { show('app'); renderApp(); }
 }
 async function flushNow() {
@@ -451,7 +451,7 @@ function arrival(events) {
   const before = new Set(T.achBefore || []);
   T.timers.forEach(clearInterval); T.keys.forEach(([ev, fn]) => window.removeEventListener(ev, fn));
   if (tr === 'car') setFuel(T.fuel);
-  T = null; LS.del('zhol_pend_' + ME.id);
+  T = null; LS.del('zhol_pend_' + ME.id); enStop();
   const del = events.filter(e => e.type === 'delivered'), cities = events.filter(e => e.type === 'new_city');
   const rw = events.find(e => e.type === 'race_win'), rl = events.find(e => e.type === 'race_lose'), rf = events.find(e => e.type === 'race_forfeit_win');
   const raceHtml = rw ? `<p style="font-size:20px">🏆 <b>Победа в жарысе!</b> Ты обогнал(а) ${pl(rw.vs).avatar} ${esc(pl(rw.vs).name)}${rw.tokens ? ' · +' + rw.tokens + ' 🪙' : ''}</p>` : rl ? `<p>⚔️ ${pl(rl.winner).avatar} ${esc(pl(rl.winner).name)} финишировал(а) первым. Ты молодец, что доехал(а)!${rl.tokens ? ' +' + rl.tokens + ' 🪙 за участие' : ''}</p>` : rf ? `<p>🏆 Соперник сошёл с дистанции — победа в жарысе за тобой!</p>` : '';
@@ -498,7 +498,7 @@ function buildEngine() {
   if (T.tr === 'bike') h += `<div class="pads"><button class="pedal next" id="pl">◀ Левая</button><button class="pedal next" id="pr">Правая ▶</button></div>`;
   if (T.tr === 'horse') h += `<div class="beatwrap"><div class="beat" id="beat">🐎</div></div><div class="hint" id="combo">Лови ритм копыт: тык-тык-тык</div><div class="inline"><button class="btn" id="oats" style="display:none">🌾 Дать жем</button></div><button class="hoof" id="hoof">🐾 Цок!</button>`;
   if (T.tr === 'car') h += `<button class="gas" id="gas">⛽ Газ (держи)</button><div class="empty hidden" id="empty"><div class="et">⛽ Бензин кончился</div><div class="muted" id="emptyT"></div><button class="stepbtn" id="push">🫸 Толкать машину</button><div class="muted">Толкать — медленно, как пешком. Ещё может встретиться заправка, а в следующем городе можно пересесть на другой транспорт.</div></div>`;
-  if (T.tr === 'bus' || T.tr === 'train' || T.tr === 'plane') h += `<div class="auto" id="auto"><div class="veh">${TR.icon}</div></div><div class="hint">${T.tr !== 'plane' ? 'Едем, пока окно открыто. Лови бонусы!' : 'Летим! Не закрывай окно.'}</div>`;
+  if (T.tr === 'bus' || T.tr === 'train' || T.tr === 'plane') h = `<div id="enIn" class="enslot enin"></div>` + h + `<div class="auto" id="auto"><div class="veh">${TR.icon}</div></div><div class="hint">${T.tr !== 'plane' ? 'Едем, пока окно открыто. Лови бонусы!' : 'Летим! Не закрывай окно.'}</div>`;
   E.innerHTML = h;
   const down = (el, fn) => el.addEventListener('pointerdown', e => { e.preventDefault(); fn(e); });
   if (T.tr === 'walk') {
@@ -562,8 +562,129 @@ function tick() {
     drawTrip();
   } else if (T.tr === 'bus' || T.tr === 'train' || T.tr === 'plane') addKm(TR.perSec * dt, false);
   else { if (now - T.lastProg > 1200) T.stamina = Math.min(100, T.stamina + dt * (T.tr === 'horse' ? 6 : 10)); if (T.tired && T.stamina >= REST_TO) { T.tired = false; toast('💪 Отдохнул — вперёд!'); } drawTrip(); }
-  if (now - T.lastProg < 2000 && T.tr !== 'plane') { T.active += dt; if (T.active >= T.nextEvent) { T.active = 0; T.nextEvent = rnd(40, 70); miniEvent(); } }
+  if (now - T.lastProg < 2000 && T.tr !== 'plane') { T.active += dt; if (T.active >= T.nextEvent) { if (T.en?.quiz && !T.en.quiz.res) T.active -= 8; else { T.active = 0; T.nextEvent = rnd(40, 70); miniEvent(); } } }
 }
+
+/* ---------- 📘 English / 🇰🇿 Қазақша в дороге ---------- */
+// Карточки слов в пустом месте экрана поездки (у «ручного» транспорта — компактно над кнопками, у автобуса/поезда/самолёта — крупно в окне).
+// Язык у каждого ребёнка (ME.en.lang): en — английский по возрасту (A1/A2/B1), kk — казахский (базовый, школьная программа 9–11 лет), both — по очереди.
+// Каждые ~5 карточек (не чаще 40 сек) или ~75 сек — мини-тест: вопрос и проверку делает сервер (zhol_en_quiz / zhol_en_answer), верно — +1 🪙 (до 10 в день).
+// Интервальное повторение: слова с ошибкой (localStorage) возвращаются чаще, пока на них не ответят верно 2 раза.
+const EN_LVL = { a1: { n: 'A1 · начальный', ex: false }, a2: { n: 'A2 · базовый', ex: true }, b1: { n: 'B1 · средний', ex: true } };
+const LANGS = { en: '📘 English', kk: '🇰🇿 Қазақша', both: '🇰🇿 + 📘 Обе' };
+const enLvl = age => age <= 11 ? 'a1' : age <= 14 ? 'a2' : 'b1';
+const enWords = lvl => (window.ZHOL_WORDS?.[lvl] || []).map(w => ({ id: lvl + ':' + w[0], en: w[0], hint: w[1], ru: w[2], kk: w[3], ex: w[4], cat: w[5] }));
+const kkWords = () => enWords('a1').filter(w => w.kk);
+const enLang = () => ME.en?.lang || 'en';
+const enOff = () => LS.get('zhol_en_off_' + ME.id, false);
+const enMem = () => { const m = LS.get('zhol_en2_' + ME.id, null); return m && m.seen && m.due ? m : { seen: {}, due: {} }; };
+const enSave = m => LS.set('zhol_en2_' + ME.id, m);
+const canSpeak = () => 'speechSynthesis' in window && typeof SpeechSynthesisUtterance !== 'undefined';
+function say(t) {
+  if (!canSpeak()) return;
+  try { speechSynthesis.cancel(); const vs = speechSynthesis.getVoices(), v = vs.find(v => /^en[-_](US|GB)/i.test(v.lang)) || vs.find(v => /^en/i.test(v.lang));
+    const u = new SpeechSynthesisUtterance(t); if (v) u.voice = v; u.lang = v?.lang || 'en-US'; u.rate = 0.85; speechSynthesis.speak(u); } catch (e) {}
+}
+function enStop() { $('#enTop').innerHTML = ''; if ($('#enIn')) $('#enIn').innerHTML = ''; try { canSpeak() && speechSynthesis.cancel(); } catch (e) {} }
+function enStart() {
+  enStop(); if (!T || !window.ZHOL_WORDS) return;
+  const lvl = ME.en?.lvl || enLvl(ME.age), big = isAuto(T.tr), lang = enLang();
+  T.en = { lvl, lang, decks: { en: enWords(lvl), kk: kkWords() }, turn: lang === 'en' ? 'en' : 'kk', qturn: lang === 'en' ? 'en' : 'kk', slot: big ? '#enIn' : '#enTop', big, cur: null, recent: [], cards: 0, lastQuiz: performance.now(), lastCard: 0, quiz: null, busy: false };
+  if (!T.en.decks.en.length) { T.en = null; return; }
+  enNext(); T.timers.push(setInterval(enTick, 1000));
+}
+const enKey = (L, id) => L + '|' + id;
+function enPick(L) {
+  const E = T.en, m = enMem(), deck = E.decks[L], not = w => !(E.cur && E.cur.L === L && w.id === E.cur.id);
+  const due = deck.filter(w => m.due[enKey(L, w.id)] && not(w));
+  if (due.length && Math.random() < 0.35) return pick(due);
+  const unseen = deck.filter(w => !m.seen[enKey(L, w.id)] && not(w));
+  return pick(unseen.length ? unseen : deck.filter(not));
+}
+function enNext() {
+  const E = T?.en; if (!E || E.quiz) return;
+  const L = E.lang === 'both' ? E.turn : E.lang; if (E.lang === 'both') E.turn = L === 'kk' ? 'en' : 'kk';
+  const w = { ...enPick(L), L }; E.cur = w; E.cards++; E.lastCard = performance.now();
+  E.recent = [w, ...E.recent.filter(x => !(x.id === w.id && x.L === L))].slice(0, 10);
+  const m = enMem(), k = enKey(L, w.id); m.seen[k] = (m.seen[k] || 0) + 1; enSave(m);
+  enRender();
+}
+function enHide() { LS.set('zhol_en_off_' + ME.id, true); if (T?.en) T.en.quiz = null; enRender(); toast('Карточки скрыты. Вернуть — кнопка «📘 Слова»', 2500); }
+function enRender() {
+  const E = T?.en; if (!E) return;
+  const el = $(E.slot);
+  if (enOff()) { el.innerHTML = `<div class="enoff"><button class="enpill" id="enOn">${E.lang === 'en' ? '📘 English' : E.lang === 'kk' ? '🇰🇿 Қазақша' : '📘 Слова'}</button></div>`; $('#enOn').onclick = () => { LS.set('zhol_en_off_' + ME.id, false); E.lastCard = 0; enNext(); }; return; }
+  if (E.quiz) return enQuizRender();
+  const w = E.cur, kk = w.L === 'kk', ex = !kk && EN_LVL[E.lvl].ex && w.ex;
+  const btns = `<span class="enbtns">${!kk && canSpeak() ? '<button id="enSay" title="Послушать" aria-label="Послушать">🔊</button>' : ''}<button id="enNx" title="Следующее слово" aria-label="Следующее слово">▶</button><button id="enX" title="Скрыть карточки" aria-label="Скрыть карточки">✕</button></span>`;
+  el.innerHTML = kk
+    ? `<div class="encard kk ${E.big ? 'big' : 'mini'}"><div class="enhead"><span>🇰🇿 Қазақша в дороге · базовый</span>${btns}</div>
+      <div class="enword"><b>${esc(w.kk)}</b></div><div class="enru">${esc(w.ru)} <span class="enkk">· англ. ${esc(w.en)}</span></div></div>`
+    : `<div class="encard ${E.big ? 'big' : 'mini'}"><div class="enhead"><span>📘 English в дороге · ${EN_LVL[E.lvl].n}</span>${btns}</div>
+      <div class="enword"><b>${esc(w.en)}</b> <span class="enhint">[${esc(w.hint)}]</span></div>
+      <div class="enru">${esc(w.ru)}${w.kk ? ` <span class="enkk">· қаз. ${esc(w.kk)}</span>` : ''}</div>${ex ? `<div class="enex">«${esc(w.ex)}»</div>` : ''}</div>`;
+  if ($('#enSay')) $('#enSay').onclick = () => say(w.en + (ex && E.big ? '. ' + w.ex : ''));
+  $('#enNx').onclick = () => enNext();
+  $('#enX').onclick = enHide;
+}
+function enTick() {
+  const E = T?.en; if (!E || T.paused || document.hidden || enOff() || E.quiz || E.busy) return;
+  const now = performance.now();
+  if (E.cards >= 3 && now - E.lastQuiz > 40000 && (E.cards >= 5 || now - E.lastQuiz > 75000)) return enQuiz();
+  if (now - E.lastCard > (E.big ? 10000 : 15000)) enNext();
+}
+async function enQuiz() {
+  const E = T.en; E.busy = true; E.lastQuiz = performance.now(); E.cards = 0;
+  const L = E.lang === 'both' ? E.qturn : E.lang; if (E.lang === 'both') E.qturn = L === 'kk' ? 'en' : 'kk';
+  const m = enMem(), due = E.decks[L].filter(w => m.due[enKey(L, w.id)]).map(w => w.id), rec = E.recent.filter(x => x.L === L).map(x => x.id);
+  const w = due.length && Math.random() < 0.6 ? pick(due) : rec.length ? pick(rec) : null;
+  const rev = Math.random() < (L === 'kk' ? 0.4 : E.lvl === 'a1' ? 0.3 : 0.45);
+  const mode = L === 'kk' ? (rev ? 'ru2kk' : 'kk2ru') : (rev ? 'ru2en' : 'en2ru');
+  try { const r = await rpc('zhol_en_quiz', { p: SESSION.id, code: SESSION.code, w, mode }); if (r.ok && T?.en === E) E.quiz = { ...r, L, picked: null, res: null }; } catch (e) {}
+  E.busy = false; if (T?.en === E) { if (E.quiz) enRender(); else E.lastCard = 0; }
+}
+const QTITLE = { en2ru: '📘 Мини-тест · Выбери перевод', ru2en: '📘 Мини-тест · Как это по-английски?', kk2ru: '🇰🇿 Мини-тест · Выбери перевод', ru2kk: '🇰🇿 Мини-тест · Как это по-казахски?' };
+function enQuizRender() {
+  const E = T.en, q = E.quiz, el = $(E.slot), R = q.res;
+  el.innerHTML = `<div class="encard quiz ${q.L === 'kk' ? 'kk' : ''} ${E.big ? 'big' : 'mini'}"><div class="enhead"><span>${QTITLE[q.mode]}</span><span class="enbtns"><button id="enX" title="Скрыть карточки" aria-label="Скрыть карточки">✕</button></span></div>
+    <div class="enword"><b>${esc(q.prompt)}</b>${q.mode === 'en2ru' && canSpeak() ? ' <button class="ensay" id="enSay" aria-label="Послушать">🔊</button>' : ''}</div>
+    <div class="enopts">${q.options.map((o, i) => `<button data-o="${i}" class="${R ? (i === R.answer ? 'ok' : i === q.picked ? 'no' : '') : ''}" ${R ? 'disabled' : ''}>${esc(o)}</button>`).join('')}</div>
+    ${R ? `<div class="enres ${R.correct ? 'ok' : 'no'}">${R.correct ? (R.tokens ? `✅ ${q.L === 'kk' ? 'Дұрыс!' : 'Верно!'} +${R.tokens} 🪙` : R.limit ? '✅ Верно! Жетоны на сегодня уже получены (дневной лимит)' : '✅ Верно!') : `❌ Правильно: <b>${esc(R.answer_text)}</b> — это слово скоро вернётся`} <button class="enlink" id="enGo">Дальше ▶</button></div>` : ''}</div>`;
+  if ($('#enSay')) $('#enSay').onclick = () => say(q.prompt);
+  $('#enX').onclick = enHide;
+  el.querySelectorAll('[data-o]').forEach(b => b.onclick = () => enAnswer(+b.dataset.o));
+  if ($('#enGo')) $('#enGo').onclick = () => { E.quiz = null; enNext(); };
+}
+async function enAnswer(i) {
+  const E = T?.en, q = E?.quiz; if (!q || q.res || E.busy) return;
+  E.busy = true; q.picked = i;
+  try {
+    const r = await rpc('zhol_en_answer', { p: SESSION.id, code: SESSION.code, q: q.id, choice: i });
+    if (!r.ok) { E.busy = false; E.quiz = null; return enNext(); }
+    q.res = r; if (r.me) { ME = r.me; if ($('#tripTok')) $('#tripTok').textContent = ME.tokens; }
+    const m = enMem(), k = enKey(q.L, q.word); if (r.correct) { if (m.due[k] && --m.due[k] <= 0) delete m.due[k]; } else m.due[k] = 2; enSave(m);
+  } catch (e) { E.busy = false; E.quiz = null; toast(e.offline ? 'Нет сети' : 'Не получилось проверить ответ'); return enNext(); }
+  E.busy = false;
+  if (T?.en === E) { enRender(); setTimeout(() => { if (T?.en === E && E.quiz === q) { E.quiz = null; enNext(); } }, q.res.correct ? 4500 : 7000); }
+}
+function enProfileCard() {
+  const en = ME.en || { ok: 0, n: 0, learned: 0, kk_learned: 0, lvl: enLvl(ME.age), lang: 'en' }, lvl = en.lvl || enLvl(ME.age), lang = en.lang || 'en';
+  const cap = +(PUB?.config?.en_daily_tokens ?? 10), today = +(ME.today_counters?.en || 0);
+  return `<div class="card"><h3>📘 Слова в дороге</h3><div class="muted">В поездке на свободном месте экрана появляются слова, а иногда — мини-тест. Верный ответ: +1 🪙, до ${cap} 🪙 в день. Слова с ошибкой возвращаются чаще.<br>📘 English — твой уровень ${EN_LVL[lvl].n} (${enWords(lvl).length} слов) · 🇰🇿 Қазақша — базовый уровень (${kkWords().length} слов)</div>
+    <div class="inline enlangs" style="margin-top:10px">${Object.entries(LANGS).map(([k, t]) => `<button class="btn ${k === lang ? 'p' : ''}" data-lang="${k}">${t}</button>`).join('')}</div>
+    <div class="stats" style="margin-top:10px">${lang !== 'kk' ? `<div class="stat"><b>${en.learned}</b><small>выучено English</small></div>` : ''}${lang !== 'en' || en.kk_learned ? `<div class="stat"><b>${en.kk_learned || 0}</b><small>выучено қазақша</small></div>` : ''}<div class="stat"><b>${en.ok} из ${en.n}</b><small>верных${en.n ? ' · ' + Math.round(100 * en.ok / en.n) + '%' : ''}</small></div><div class="stat"><b>${today}/${cap}</b><small>🪙 сегодня</small></div></div>
+    <button class="btn" id="enTg" style="margin-top:10px">${enOff() ? '👀 Показывать слова в дороге' : '🙈 Не показывать слова в дороге'}</button></div>`;
+}
+async function enSetLang(lang) {
+  try { const r = await rpc('zhol_en_lang', { p: SESSION.id, code: SESSION.code, lang }); if (!r.ok) return toast(errText(r.error)); ME = r.me; renderAch(); toast('Слова в дороге: ' + LANGS[lang]); }
+  catch (e) { toast(e.offline ? 'Нет сети' : e.message); }
+}
+const enFamLine = k => { const en = k.en || { ok: 0, n: 0, learned: 0, kk_learned: 0, lvl: enLvl(k.age), lang: 'en' }, lang = en.lang || 'en';
+  const parts = [];
+  if (lang !== 'kk' || en.learned) parts.push(`📘 English: выучено ${en.learned} ${plural(en.learned, 'слово', 'слова', 'слов')} (${EN_LVL[en.lvl || enLvl(k.age)].n})`);
+  if (lang !== 'en' || en.kk_learned) parts.push(`🇰🇿 Қазақша: выучено ${en.kk_learned || 0} ${plural(en.kk_learned || 0, 'слово', 'слова', 'слов')}`);
+  return `<div class="kblock"><b>Слова в дороге (${LANGS[lang]}):</b> ${parts.join(' · ')} · верно ${en.ok} из ${en.n}${en.n ? ' (' + Math.round(100 * en.ok / en.n) + '%)' : ''}</div>`; };
+const plural = (n, a, b, c) => { n = Math.abs(n) % 100; const d = n % 10; return n > 10 && n < 20 ? c : d === 1 ? a : d >= 2 && d <= 4 ? b : c; };
 
 /* ---------- мини-события ---------- */
 function miniEvent() {
@@ -636,9 +757,12 @@ function renderAch() {
     Object.entries(Z.ACH).map(([id, a]) => `<div class="ach ${ME.achievements.includes(id) ? 'on' : ''}"><div class="i">${a.i}</div><b>${a.t}</b><small>${a.d}</small></div>`).join('') + `</div></div>`;
   h += `<div class="card"><h3>🎁 Подарки для Әже</h3><div class="muted">Проезжай города — собирай сувениры и вези в Кордай. Новый сувенир: +10 🪙, повтор: +3 🪙.</div>` +
     PUB.nodes.filter(n => n.souvenir && (isOpen(n.id) || ME.gifts.includes(n.id) || ME.delivered.includes(n.id))).map(n => `<div class="row"><div class="av">${ME.delivered.includes(n.id) ? '✅' : ME.gifts.includes(n.id) ? '🎒' : '▫️'}</div><div class="grow"><b>${esc(n.souvenir)}</b><small>${esc(n.name)}${ME.delivered.includes(n.id) ? ' · доставлено Әже' : ME.gifts.includes(n.id) ? ' · в сумке, вези в Кордай' : ''}</small></div></div>`).join('') + (PUB.nodes.some(n => n.souvenir && !isOpen(n.id)) ? `<div class="muted" style="margin-top:8px">🔒 Ещё ${PUB.nodes.filter(n => n.souvenir && !isOpen(n.id)).length} сувениров ждут в закрытых краях.</div>` : '') + `</div>`;
+  h += enProfileCard();
   h += `<div class="card"><h3>📊 Моя дорога</h3><div class="stats"><div class="stat"><b>${fmt(ME.km_total)}</b><small>км всего</small></div><div class="stat"><b>${fmt(ME.longest_trip)}</b><small>самая длинная поездка</small></div><div class="stat"><b>${ME.quiz_ok}</b><small>верных ответов</small></div></div>
     <div class="muted" style="margin-top:10px">Транспорт: ${Object.entries(Z.TRANSPORT).map(([id, t]) => `<span style="opacity:${ME.transports.includes(id) ? 1 : .3}">${t.icon}</span>`).join(' ')} · Был(а) в: ${ME.visited.map(v => esc(N[v]?.name)).join(', ')}</div></div>`;
   $('#tab-ach').innerHTML = h;
+  $('#enTg').onclick = () => { LS.set('zhol_en_off_' + ME.id, !enOff()); renderAch(); toast(enOff() ? 'Слова в дороге скрыты' : 'Слова в дороге включены 📘'); };
+  $('#tab-ach').querySelectorAll('[data-lang]').forEach(b => b.onclick = () => enSetLang(b.dataset.lang));
 }
 /* ---------- банк ---------- */
 const STATUS = { pending: ['wait', 'ждёт родителей'], approved: ['ok', 'подтверждено'], done: ['ok', 'выдано ✓'], rejected: ['no', 'отклонено'] };
@@ -685,18 +809,27 @@ $('#toTest').onclick = () => {
   sheet(`<h2>🧪 Тестовый вход</h2><div class="muted">Для проверки функций. Тестовый игрок не виден детям и родителям, не попадает в рейтинги, итоги семьи и общий чат; жарыс с настоящими детьми невозможен.</div>
     <button class="opt" id="tKid"><span class="i">🧪</span><span><b>Тест (Асет) — как ребёнок</b><small>код из 4 цифр</small></span></button>
     <button class="opt" id="tFam"><span class="i">👪</span><span><b>Семья «Тест» — как родитель</b><small>код из 6 цифр · подтверждать дела и запросы тестового, сброс прогресса</small></span></button>
+    <div class="muted" style="margin-top:12px">👋 Гостевой вход (действует до 23:59 18.11 по Алматы)</div>
+    <button class="opt" id="gKid"><span class="i">🐣</span><span><b>Айзере — как ребёнок</b><small>гостевой код</small></span></button>
+    <button class="opt" id="gFam"><span class="i">👀</span><span><b>Семья «Гость» — как родитель</b><small>гостевой код · просмотр всех детей</small></span></button>
     <button class="btn" style="width:100%;margin-top:12px" onclick="document.getElementById('modal').click()">Отмена</button>`);
-  $('#tKid').onclick = () => codePad('🧪 Тест (Асет)', 'Код тестового ребёнка', { onSubmit: async (code, fail) => {
-    try { const r = await rpc('zhol_login', { p: Z.TEST_KID, code }); if (!r.ok) return fail(errText(r.error));
-      LS.set('zhol_test', true); SESSION = { id: Z.TEST_KID, code }; LS.set('zhol_mode', 'kid'); LS.set('zhol_me', SESSION); ME = r.me; REQS = r.requests; try { await loadPub(); } catch (e) {} closeSheet(); enterApp(); }
+  const kidLogin = (id, title, sub, len) => codePad(title, sub, { min: len, max: len, onSubmit: async (code, fail) => {
+    try { const r = await rpc('zhol_login', { p: id, code }); if (!r.ok) return fail(errText(r.error));
+      LS.set('zhol_test', true); SESSION = { id, code }; LS.set('zhol_mode', 'kid'); LS.set('zhol_me', SESSION); ME = r.me; REQS = r.requests; try { await loadPub(); } catch (e) {} closeSheet(); enterApp(); }
     catch (e) { fail(e.offline ? 'Нет сети' : e.message); }
   } });
-  $('#tFam').onclick = () => codePad('👪 Семья «Тест»', 'Код тестовой семьи (6 цифр)', { min: 6, max: 6, onSubmit: async (code, fail) => {
-    try { const r = await rpc('zhol_family_login', { f: Z.TEST_FAM, code }); if (!r.ok) return fail(errText(r.error === 'bad_code' ? 'bad_fcode' : r.error));
-      FAM = { id: Z.TEST_FAM, code }; LS.set('zhol_fam', FAM); LS.set('zhol_mode', 'family'); closeSheet(); enterFamily(r); }
+  const famLogin = (id, title, sub, len) => codePad(title, sub, { min: len, max: len, onSubmit: async (code, fail) => {
+    try { const r = await rpc('zhol_family_login', { f: id, code }); if (!r.ok) return fail(errText(r.error === 'bad_code' ? 'bad_fcode' : r.error));
+      FAM = { id, code }; LS.set('zhol_fam', FAM); LS.set('zhol_mode', 'family'); closeSheet(); enterFamily(r); }
     catch (e) { fail(e.offline ? 'Нет сети' : e.message); }
   } });
+  $('#tKid').onclick = () => kidLogin(Z.TEST_KID, '🧪 Тест (Асет)', 'Код тестового ребёнка', 4);
+  $('#tFam').onclick = () => famLogin(Z.TEST_FAM, '👪 Семья «Тест»', 'Код тестовой семьи (6 цифр)', 6);
+  $('#gKid').onclick = () => kidLogin('ztest_g1', '🐣 Сәлем, Айзере!', 'Гостевой код (6 цифр)', 6);
+  $('#gFam').onclick = () => famLogin('ztest_g', '👀 Семья «Гость»', 'Гостевой код (8 цифр)', 8);
 };
+ERR.expired = 'Срок гостевого входа закончился';
+ERR.read_only = 'В гостевом режиме это недоступно — только просмотр';
 async function testReset() {
   if (!FAM || !isTest(FAM.id) || !confirm('Сбросить весь прогресс тестового ребёнка? (км, жетоны, звёзды, края, запросы, его сообщения — домой в Астану)')) return;
   try { const r = await rpc('zhol_test_reset', { f: FAM.id, code: FAM.code }); if (!r.ok) return toast(errText(r.error)); renderFamilyView(r); toast('Тестовый сброшен 🧪'); }
@@ -709,7 +842,7 @@ function enterFamily(r) {
 }
 async function refreshFamily() {
   if ($('#parent').classList.contains('hidden') || !FAM) return;
-  try { const r = await rpc('zhol_family_login', { f: FAM.id, code: FAM.code }); if (r.ok) renderFamilyView(r); else if (r.error === 'bad_code') { famLogout(); alert('Код семьи изменился — войдите заново'); } } catch (e) {}
+  try { const r = await rpc('zhol_family_login', { f: FAM.id, code: FAM.code }); if (r.ok) renderFamilyView(r); else if (r.error === 'bad_code' || r.error === 'expired') { famLogout(); alert(r.error === 'expired' ? 'Срок гостевого входа закончился' : 'Код семьи изменился — войдите заново'); } } catch (e) {}
 }
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { if (vis('parent')) refreshFamily(); chatTick(true); } });
 function famLogout() { chatClose(); chatBadge(0); clearInterval(famPoll); LS.del('zhol_fam'); LS.del('zhol_famdata'); LS.set('zhol_mode', ''); FAM = null; FAMDATA = null; show('login'); loadPub().then(renderKids).catch(() => {}); }
@@ -739,7 +872,7 @@ function renderFamilyView(r) {
     return `<div class="card kidcard"><div class="row" style="border:0;padding-top:0"><div class="av" style="background:${k.color};width:48px;height:48px;font-size:28px">${k.avatar}</div><div class="grow"><b style="font-size:18px">${esc(k.name)}</b><small>${k.age} лет · ${esc(k.school)} · ${Z.LEAGUES[k.league].name}</small></div><div class="chip" style="background:#fff1cf;color:#3a2400"><b>${k.tokens}</b> 🪙</div></div>
       <div class="kstatus">${tripLine(k)}</div>${pct !== null ? `<div class="bar"><i style="width:${pct}%"></i></div><div class="muted">${fmt(k.trip.done)} из ${fmt(k.trip.total)} км</div>` : ''}
       <div class="stats"><div class="stat"><b>${fmt(k.today_km)}</b><small>км сегодня</small></div><div class="stat"><b>${fmt(k.week_km)}</b><small>км за неделю</small></div><div class="stat"><b>${fmt(k.km_total)}</b><small>км всего</small></div></div>
-      <div class="kblock"><b>⭐ Добрые дела:</b> ${k.stars || 0} ⭐ · открыто краёв ${(k.unlocked || []).length} из ${REGS().length}${(k.unlocked || []).length ? ' — ' + k.unlocked.map(u => esc(regInfo(u).n)).join(', ') : ''}${nextReg(k) ? ` · до «${esc(nextReg(k).n)}» ещё ${Math.max(0, nextReg(k).need - (k.stars || 0))} ⭐` : ''}</div>
+      <div class="kblock"><b>⭐ Добрые дела:</b> ${k.stars || 0} ⭐ · открыто краёв ${(k.unlocked || []).length} из ${REGS().length}${(k.unlocked || []).length ? ' — ' + k.unlocked.map(u => esc(regInfo(u).n)).join(', ') : ''}${nextReg(k) ? ` · до «${esc(nextReg(k).n)}» ещё ${Math.max(0, nextReg(k).need - (k.stars || 0))} ⭐` : ''}</div>${enFamLine(k)}
       <div class="kblock"><b>🗺️ Города (${k.visited.length}):</b> ${k.visited.map(v => esc(N[v]?.name || v)).join(', ')}</div>
       <div class="kblock"><b>🎁 Сувениры:</b> ${k.delivered.length ? 'доставлено Әже — ' + k.delivered.map(g => esc(N[g]?.souvenir)).join(', ') : 'пока не доставлено'}${k.gifts.length ? '; в сумке — ' + k.gifts.map(g => esc(N[g]?.souvenir)).join(', ') : ''}</div>
       <div class="kblock"><b>🏅 Достижения (${k.achievements.length}/${Object.keys(Z.ACH).length}):</b> ${k.achievements.length ? k.achievements.map(a => `<span class="tag" title="${esc(Z.ACH[a]?.d)}">${Z.ACH[a]?.i} ${esc(Z.ACH[a]?.t || a)}</span>`).join(' ') : 'пока нет'}</div>
@@ -747,12 +880,14 @@ function renderFamilyView(r) {
   };
   const RQ = r.requests || [], open = RQ.filter(q => q.status === 'pending' || q.status === 'approved'), past = RQ.filter(q => q.status === 'done' || q.status === 'rejected').slice(0, 5);
   const KP = id => r.kids.find(k => k.id === id) || P(id);
-  const rqRow = q => { const k = KP(q.player); return `<div class="row rq"><div class="av" style="background:${k.color || '#eee'}33">${k.avatar}</div><div class="grow"><b>${esc(k.name)}: ${kindTxt(q)}</b><small>${fdt(q.created_at)} · ${stTag(q)}${q.note ? ' · ' + esc(q.note) : ''}</small></div>${q.status === 'pending' ? `<div class="rqbtns"><button class="btn p" data-fdec="${q.id}" data-s="approved">✅ Подтвердить</button><button class="btn r" data-fdec="${q.id}" data-s="rejected">❌ Отклонить</button></div>` : q.status === 'approved' ? `<div class="rqbtns"><button class="btn" data-fdec="${q.id}" data-s="done">🎁 Выдано</button></div>` : ''}</div>`; };
+  const RO = !!r.family.ro, mine = id => KP(id).family === r.family.id;
+  const rqRow = q => { const k = KP(q.player); if (RO && !mine(q.player)) return `<div class="row rq"><div class="av" style="background:${k.color || '#eee'}33">${k.avatar}</div><div class="grow"><b>${esc(k.name)}: ${kindTxt(q)}</b><small>${fdt(q.created_at)} · ${stTag(q)} · 👀 решают родители</small></div></div>`; return `<div class="row rq"><div class="av" style="background:${k.color || '#eee'}33">${k.avatar}</div><div class="grow"><b>${esc(k.name)}: ${kindTxt(q)}</b><small>${fdt(q.created_at)} · ${stTag(q)}${q.note ? ' · ' + esc(q.note) : ''}</small></div>${q.status === 'pending' ? `<div class="rqbtns"><button class="btn p" data-fdec="${q.id}" data-s="approved">✅ Подтвердить</button><button class="btn r" data-fdec="${q.id}" data-s="rejected">❌ Отклонить</button></div>` : q.status === 'approved' ? `<div class="rqbtns"><button class="btn" data-fdec="${q.id}" data-s="done">🎁 Выдано</button></div>` : ''}</div>`; };
   let h = `<div class="card fam-reqs" id="famReqs"><h3>📬 Запросы детей ${r.pending ? `<span class="nb">${r.pending}</span>` : ''}</h3><div class="muted">Подтвердите или отклоните — ребёнок сразу увидит ответ. Подтверждённую награду отметьте «Выдано», когда отдадите её. ⭐ Добрые дела (оценки, чтение, помощь дома) подтверждайте, только если это правда — за звёзды открываются новые города.</div>${open.length ? open.map(rqRow).join('') : '<div class="empty">Новых запросов нет 👍</div>'}${past.length ? `<details><summary>Недавно решённые</summary>${past.map(rqRow).join('')}</details>` : ''}</div>`;
   $('#famBadge').innerHTML = r.pending ? `📬 <b>${r.pending}</b>` : ''; $('#famBadge').classList.toggle('hidden', !r.pending);
   let kh = '';
   if (r.family.all) for (const fm of r.families || []) { const ks = r.kids.filter(k => k.family === fm.id); if (ks.length) kh += `<h2 class="famhead">🏡 ${esc(fm.name)}</h2>` + ks.map(kidCard).join(''); }
   else kh = r.kids.map(kidCard).join('');
+  if (r.family.all && r.kids.some(k => k.family === r.family.id)) kh = `<h2 class="famhead">🐣 Ваш гостевой ребёнок</h2>` + r.kids.filter(k => k.family === r.family.id).map(kidCard).join('') + kh;
   h += `<div class="fam-kids">${kh}</div>`;
   const f = PUB.family, goal = weekGoal(), wk = +f.week_km;
   h += `<div class="fam-all"><div class="card"><h3>🏁 Вся семья</h3><div class="muted">Цель недели — все 8 детей доезжают из дома до Ата и Әже (${fmt(goal)} км).</div><div class="bar"><i style="width:${Math.min(100, 100 * wk / goal)}%"></i></div>
@@ -762,7 +897,8 @@ function renderFamilyView(r) {
     ${raceCard(r.family.all ? null : c => r.kids.some(k => k.id === c.challenger || k.id === c.opponent))}
     <div class="card"><h3>🏆 Рейтинг недели</h3>${[...PUB.players].sort((a, b) => b.week_km - a.week_km || b.km_total - a.km_total).map((p, i) => `<div class="row"><div style="width:22px;font-weight:800">${i + 1}</div><div class="av" style="background:${p.color}33">${p.avatar}</div><div class="grow"><b>${esc(p.name)}</b><small>${Z.LEAGUES[p.league].name} · всего ${fmt(p.km_total)} км</small></div><b>${fmt(p.week_km)} км</b></div>`).join('')}</div>
     <div class="card"><h3>🕑 Последние события (${r.family.all ? 'все дети' : 'ваши дети'})</h3>${r.activity.length ? r.activity.slice(0, 15).map(a => `<div class="row"><div class="grow">${actLine(a, P)}<small>${fdt(a.at)}</small></div></div>`).join('') : '<div class="muted">Пока событий нет — дети ещё не выезжали.</div>'}</div></div>`;
-  if (isTest(r.family.id)) h = `<div class="card testcard"><h3>🧪 Тестовый режим</h3><div class="muted">Эта семья и ребёнок «Тест (Асет)» скрыты от всех: их нет у детей, в рейтингах, итогах и общем чате.</div><button class="big-btn" id="tReset">♻️ Сбросить тестового ребёнка</button></div>` + h;
+  if (RO) h = `<div class="card testcard"><h3>👀 Гостевой просмотр</h3><div class="muted">Вы видите всех детей: карту, поездки, км, достижения и семейный чат — только просмотр, без подтверждений, удаления и сообщений. Подтверждать можно дела гостевого ребёнка «Айзере» (она скрыта от настоящих детей и рейтингов). Вход действует до 23:59 18.11 по Алматы.</div></div>` + h;
+  else if (isTest(r.family.id)) h = `<div class="card testcard"><h3>🧪 Тестовый режим</h3><div class="muted">Эта семья и ребёнок «Тест (Асет)» скрыты от всех: их нет у детей, в рейтингах, итогах и общем чате.</div><button class="big-btn" id="tReset">♻️ Сбросить тестового ребёнка</button></div>` + h;
   $('#parentMain').innerHTML = h;
   if ($('#tReset')) $('#tReset').onclick = testReset;
   mapZoomInit(); renderMap($('#pmap'), null);
@@ -965,7 +1101,7 @@ async function chatTick(force) {
 setInterval(() => { if (!CHAT.open && !vis('trip')) chatTick(); }, 20000);
 function chatApply(r) {
   const c = chatId(); if (!c) return;
-  CHAT.msgs = r.messages; CHAT.mod = r.mod; CHAT.last = r.last; LS.set(seenKey(c), r.last); chatBadge(0);
+  CHAT.msgs = r.messages; CHAT.mod = r.mod; CHAT.ro = !!r.ro; document.querySelector('.chat-in').classList.toggle('hidden', CHAT.ro); CHAT.last = r.last; LS.set(seenKey(c), r.last); chatBadge(0);
   const sig = r.messages.map(m => m.id + (m.deleted ? 'd' : '')).join(',') + CHAT.mod;
   if (sig === CHAT.sig) return; CHAT.sig = sig; chatRender();
 }
@@ -982,7 +1118,7 @@ function chatRender() {
 function chatOpen() {
   const c = chatId(); if (!c) return;
   closeSheet(); CHAT.open = true; CHAT.sig = ''; CHAT.rendered = false; $('#chat').classList.remove('hidden'); document.body.classList.add('chat-on');
-  $('#chatSub').textContent = c.who === 'admin' ? 'Вы пишете как «Асет (админ)»' : c.who === 'family' ? 'Вы пишете как ' + (FAMDATA?.family?.all ? '«Асет»' : '«Родители · ' + (FAMDATA?.family?.name || '') + '»') : 'Вся семья: 8 детей, родители и Асет';
+  $('#chatSub').textContent = c.who === 'admin' ? 'Вы пишете как «Асет (админ)»' : c.who === 'family' ? FAMDATA?.family?.ro ? '👀 Только чтение (гостевой вход)' : 'Вы пишете как ' + (FAMDATA?.family?.all ? '«Асет»' : '«Родители · ' + (FAMDATA?.family?.name || '') + '»') : 'Вся семья: 8 детей, родители и Асет';
   $('#chatList').innerHTML = '<div class="empty">Загружаю…</div>'; chatFit();
   chatTick(true); clearInterval(CHAT.timer); CHAT.timer = setInterval(() => { if (CHAT.open) chatTick(); }, 5000);
   if (!matchMedia('(pointer:coarse)').matches) $('#chatIn').focus();

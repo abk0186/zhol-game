@@ -259,3 +259,24 @@ body.chat-on{overflow:hidden}
 .opt.off-lock{opacity:.8;background:#f2eee6}
 .link.tiny{margin-top:10px;font-size:12px;opacity:.5}
 .testcard{border:2px dashed #7a5cff}
+
+/* 📘 English в дороге */
+.enslot:empty{display:none}
+.encard{background:var(--card);color:var(--ink);border-radius:16px;padding:8px 12px 10px;margin-top:10px;box-shadow:0 4px 14px rgba(0,0,0,.18);user-select:text;-webkit-user-select:text}
+.enhead{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:11px;color:var(--muted);font-weight:700}
+.enbtns{display:flex;gap:4px;flex-shrink:0}.enbtns button,.ensay{background:#efe6d6;border-radius:10px;min-width:34px;height:30px;font-size:14px}
+.enword{margin-top:2px;font-size:22px}.enword b{font-size:24px;color:#1d4e89}.enhint{font-size:14px;color:var(--muted)}
+.enru{font-size:17px;font-weight:700}.enkk{font-weight:600;color:#1f8a5b;font-size:15px}
+.enex{font-size:13px;color:#4a5560;font-style:italic;margin-top:2px}
+.encard.mini .enword{font-size:18px}.encard.mini .enword b{font-size:20px}.encard.mini .enru{font-size:15px}.encard.mini .enex{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.encard.big{padding:12px 16px 14px;text-align:center}.encard.big .enhead{text-align:left}.encard.big .enword b{font-size:32px}.encard.big .enru{font-size:21px}.encard.big .enex{font-size:15px;margin-top:6px}
+.enopts{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}
+.enopts button{background:#f3ecdf;border-radius:12px;padding:9px 6px;font-weight:700;font-size:15px;min-height:42px;color:var(--ink)}
+.encard.mini .enopts button{padding:6px 4px;min-height:36px;font-size:14px}
+.enopts button.ok{background:#cdeedb;color:#16653a}.enopts button.no{background:#f6d2c6;color:#8a2a10}
+.enres{margin-top:8px;font-size:14px;font-weight:700}.enres.ok{color:#16653a}.enres.no{color:#8a2a10}
+.enlink{background:none;color:#1d4e89;font-weight:800;text-decoration:underline;padding:0 4px}
+.enoff{display:flex;justify-content:flex-end;margin-top:6px}.enpill{background:rgba(255,255,255,.14);color:var(--cream);border-radius:999px;padding:6px 12px;font-size:13px;font-weight:700}
+@media(max-height:760px){.encard.mini .enex{display:none}}
+.enin{margin-bottom:auto}.enin .encard{margin-top:0}
+.encard.kk .enword b{color:#0f7a8a}.enlangs{flex-wrap:wrap;gap:6px}.enlangs .btn{flex:1;min-width:110px}

@@ -1,0 +1,164 @@
+#travel
+journey|джёрни|путешествие, поездка||Our journey to Almaty took two days.
+passenger|пэсинджэ|пассажир||Every passenger needs a ticket.
+platform|плэтформ|платформа, перрон||The train leaves from platform three.
+luggage|лагидж|багаж||Put your luggage on the shelf.
+timetable|таймтэйбл|расписание||Check the timetable before you go.
+departure|дипачэ|отправление||Departure is at seven in the morning.
+arrival|эрайвл|прибытие||Our arrival time is ten in the evening.
+delay|дилэй|задержка||There is a short delay because of the snow.
+passport|паспорт|паспорт||Don't forget your passport!
+border|бодэ|граница||We crossed the border at night.
+carriage|кэридж|вагон||Our seats are in carriage number five.
+compartment|кэмпатмэнт|купе||We had a compartment for four people.
+conductor|кэндактэ|проводник, кондуктор||The conductor brought us hot tea.
+pilot|пайлэт|пилот||The pilot said hello to the passengers.
+flight|флайт|рейс, полёт||The flight to Astana is two hours long.
+boarding pass|бодинг пас|посадочный талон||Show your boarding pass at the gate.
+seat belt|сит бэлт|ремень безопасности||Fasten your seat belt, please.
+tourist|туэрист|турист||Many tourists visit Turkistan.
+guide|гайд|гид, экскурсовод||Our guide told us about the old city.
+hotel|хоутэл|гостиница||The hotel is near the station.
+souvenir|сувэниэ|сувенир||I bought a souvenir for my grandma.
+camera|кэмэрэ|фотоаппарат||Take your camera — the view is amazing!
+backpack|бэкпэк|рюкзак||My backpack is full of snacks.
+destination|дэстинэйшн|место назначения||Our final destination is Kordai.
+route|рут|маршрут||This route goes through the mountains.
+distance|дистэнс|расстояние||What is the distance to Taraz?
+kilometre|килэмитэ|километр||We drove five hundred kilometres today.
+highway|хайуэй|шоссе, трасса||The highway is wide and fast.
+bridge|бридж|мост||The train went over a long bridge.
+tunnel|танл|тоннель||It was dark in the tunnel.
+#city
+city centre|сити сэнтэ|центр города||The museum is in the city centre.
+square|скуэа|площадь||There is a big fountain in the square.
+museum|мьюзиэм|музей||We visited a history museum.
+library|лайбрэри|библиотека||I take books from the library.
+hospital|хоспитл|больница||My aunt works at a hospital.
+market|макит|рынок||We buy fruit at the market.
+shop|шоп|магазин||The shop opens at nine.
+bank|бэнк|банк||The bank is next to the post office.
+post office|поуст офис|почта||Send the letter from the post office.
+park|пак|парк||Let's play football in the park.
+building|билдинг|здание||This building is very tall.
+corner|конэ|угол||Turn left at the corner.
+traffic|трэфик|дорожное движение||There is a lot of traffic in the morning.
+traffic lights|трэфик лайтс|светофор||Stop at the traffic lights.
+neighbour|нэйбэ|сосед||Our neighbour has a big dog.
+village|вилидж|деревня, аул||My grandparents live in a village.
+#nature
+hill|хил|холм||We climbed a small hill.
+valley|вэли|долина||The village is in a green valley.
+waterfall|уотэфол|водопад||The waterfall is very loud.
+island|айлэнд|остров||There is a small island in the lake.
+coast|коуст|побережье||We walked along the coast.
+field|филд|поле||Horses run across the field.
+sand|сэнд|песок||The desert is full of sand.
+ice|айс|лёд||The lake is covered with ice in winter.
+weather|уэзэ|погода||The weather is sunny today.
+storm|сторм|буря, гроза||A storm is coming from the west.
+sunset|сансэт|закат||The sunset over the steppe was beautiful.
+sunrise|санрайз|рассвет||We woke up early to see the sunrise.
+season|сизн|время года||Spring is my favourite season.
+spring|спринг|весна||Apple trees bloom in spring.
+summer|самэ|лето||In summer we go to the mountains.
+autumn|отэм|осень||Leaves turn yellow in autumn.
+winter|уинтэ|зима||It snows a lot in winter.
+wild|уайлд|дикий||Wild horses live in the steppe.
+plant|плант|растение||Water the plants every day.
+leaf|лиф|лист (дерева)||A leaf fell on my book.
+#feelings
+tired|тайэд|уставший||I'm tired after the long walk.
+hungry|хангри|голодный||Are you hungry? Let's eat.
+thirsty|сёрсти|хочется пить||It's hot, and I'm thirsty.
+angry|энгри|сердитый||Don't be angry, it was an accident.
+afraid|эфрэйд|испуганный, боится||My sister is afraid of spiders.
+bored|бод|скучающий||I'm bored — let's play a game.
+excited|иксайтид|в радостном волнении||We are excited about the trip!
+proud|прауд|гордый||Mum is proud of my grades.
+worried|уарид|обеспокоенный||Dad is worried because we are late.
+surprised|сэпрайзд|удивлённый||I was surprised to see snow in May.
+calm|кам|спокойный||The lake is calm this morning.
+lonely|лоунли|одинокий||The puppy feels lonely at night.
+nervous|нёрвэс|волнуется, нервный||I'm nervous before exams.
+glad|глэд|рад||I'm glad to see you!
+sad|сэд|грустный||He is sad because his team lost.
+funny|фани|смешной||That film was really funny.
+friendly|фрэндли|дружелюбный||Our new teacher is very friendly.
+brave|брэйв|храбрый||The brave rider crossed the river.
+kind|кайнд|добрый||Thank you, you are very kind.
+polite|пэлайт|вежливый||Be polite to older people.
+lazy|лэйзи|ленивый||The cat is lazy today.
+#verbs
+arrive|эрайв|прибывать, приезжать||We arrive in Taraz tomorrow.
+leave|лив|уезжать, уходить||The bus leaves at six.
+travel|трэвл|путешествовать||I love to travel by train.
+visit|визит|навещать, посещать||We visit our grandparents every summer.
+pack|пэк|собирать (вещи)||Pack your bag tonight.
+carry|кэри|нести||Can you carry this box?
+reserve|ризёрв|бронировать||We reserved a table for six.
+buy|бай|покупать||Let's buy some water.
+sell|сэл|продавать||They sell honey at the market.
+pay|пэй|платить||I'll pay for the tickets.
+spend|спэнд|тратить; проводить (время)||We spent a week in the mountains.
+choose|чуз|выбирать||Choose a seat by the window.
+find|файнд|находить||I can't find my phone.
+lose|луз|терять; проигрывать||Don't lose your ticket!
+forget|фэгет|забывать||Don't forget to call Grandma.
+remember|римэмбэ|помнить||I remember this place.
+explain|иксплэйн|объяснять||Can you explain the rules?
+understand|андэстэнд|понимать||I don't understand this word.
+believe|билив|верить||I believe you can win.
+build|билд|строить||They are building a new road.
+climb|клайм|взбираться, лезть||Let's climb that hill.
+cross|крос|пересекать, переходить||Cross the street carefully.
+follow|фолоу|следовать за||Follow me, I know the way.
+hurry|хари|спешить||Hurry up, the train is leaving!
+wait|уэйт|ждать||Wait for me at the station.
+miss|мис|скучать; опоздать (на транспорт)||We almost missed the bus.
+share|шэа|делиться||Let's share the sandwiches.
+borrow|бороу|брать на время||Can I borrow your pencil?
+invite|инвайт|приглашать||I invited my friends to my birthday party.
+win|уин|побеждать||Who will win the race?
+practise|прэктис|тренироваться, практиковаться||Practise English every day.
+improve|импрув|улучшать||Reading helps to improve your English.
+#phrasal
+get on|гет он|садиться (в транспорт)||Get on the bus quickly.
+get off|гет оф|выходить (из транспорта)||We get off at the next stop.
+look for|лук фо|искать||I'm looking for my keys.
+look after|лук афтэ|присматривать, заботиться||I look after my little brother.
+wake up|уэйк ап|просыпаться||I wake up at seven.
+get up|гет ап|вставать (с постели)||Get up, it's time for school!
+put on|пут он|надевать||Put on your warm hat.
+take off|тэйк оф|снимать (одежду); взлетать||The plane takes off at noon.
+turn on|тёрн он|включать||Turn on the light, please.
+turn off|тёрн оф|выключать||Turn off the TV before bed.
+give up|гив ап|сдаваться, бросать||Never give up!
+find out|файнд аут|узнавать, выяснять||Let's find out the answer.
+set off|сэт оф|отправляться в путь||We set off early in the morning.
+come back|кам бэк|возвращаться||Come back soon!
+slow down|слоу даун|сбавлять скорость||Slow down, the road is icy.
+#words
+adventure|эдвэнчэ|приключение||Every trip is an adventure.
+famous|фэймэс|знаменитый||Baikonur is famous all over the world.
+dangerous|дэйнджэрэс|опасный||Swimming here is dangerous.
+safe|сэйф|безопасный||Keep your money in a safe place.
+crowded|краудид|переполненный, людный||The bus was very crowded.
+empty|эмпти|пустой||The train was almost empty.
+expensive|икспэнсив|дорогой (по цене)||This hotel is too expensive.
+cheap|чип|дешёвый||Bus tickets are cheap.
+heavy|хэви|тяжёлый||My suitcase is very heavy.
+quiet|квайэт|тихий||The village is quiet at night.
+noisy|нойзи|шумный||The city centre is noisy.
+beautiful|бьютифл|красивый||What a beautiful view!
+amazing|эмэйзинг|потрясающий||The mountains look amazing.
+favourite|фэйврит|любимый||Beshbarmak is my favourite dish.
+different|дифрэнт|разный, другой||Every region is different.
+early|ёрли|рано||We left early in the morning.
+late|лэйт|поздно; опоздавший||Sorry, I'm late.
+always|олуэйз|всегда||I always sit by the window.
+sometimes|самтаймз|иногда||Sometimes we travel by car.
+never|нэвэ|никогда||I have never seen the sea.
+already|олрэди|уже||We have already arrived.
+together|тэгэзэ|вместе||Let's travel together!
+abroad|эброд|за границей, за границу||My cousin studies abroad.

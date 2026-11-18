@@ -1,0 +1,159 @@
+#verbs
+achieve|эчив|достигать||She achieved her goal of reading fifty books.
+avoid|эвойд|избегать||Try to avoid driving in rush hour.
+manage|мэнидж|справиться, суметь||We managed to catch the last train.
+suggest|сэджэст|предлагать (идею)||I suggest leaving before sunrise.
+recommend|рэкэмэнд|рекомендовать||Can you recommend a good book?
+require|рикуайэ|требовать||This job requires a lot of patience.
+provide|прэвайд|предоставлять, обеспечивать||The hotel provides free breakfast.
+prefer|прифё|предпочитать||I prefer trains to planes.
+consider|кэнсидэ|обдумывать, рассматривать||We are considering a trip to Turkistan.
+compare|кэмпэа|сравнивать||Compare the prices before you buy.
+describe|дискрайб|описывать||Describe your favourite place.
+develop|дивэлэп|развивать||Sport helps to develop discipline.
+encourage|инкаридж|поощрять, подбадривать||My parents encourage me to read.
+expect|икспэкт|ожидать||We expect to arrive by noon.
+include|инклуд|включать (в себя)||The price includes lunch.
+increase|инкриз|увеличивать(ся)||The number of tourists increases every year.
+reduce|ридьюс|уменьшать, сокращать||We should reduce plastic waste.
+measure|мэжэ|измерять||Measure the distance on the map.
+notice|ноутис|замечать||Did you notice the eagle on the rock?
+realise|риэлайз|осознавать, понять||I realised I had left my phone at home.
+solve|солв|решать (задачу)||Can you solve this puzzle?
+support|сэпорт|поддерживать||Friends support each other.
+survive|сэвайв|выживать||Camels can survive without water for many days.
+discover|дискавэ|открывать, обнаруживать||Scientists discover new species every year.
+protect|прэтэкт|защищать||National parks protect wild animals.
+predict|придикт|предсказывать||It's hard to predict the weather in the mountains.
+persuade|пэсуэйд|убеждать, уговаривать||She persuaded me to join the club.
+apologise|эполэджайз|извиняться||He apologised for being late.
+complain|кэмплэйн|жаловаться||Don't complain — enjoy the view!
+admire|эдмайэ|восхищаться||I admire people who speak many languages.
+appreciate|эпришиэйт|ценить, быть благодарным||I really appreciate your help.
+deserve|дизёв|заслуживать||You deserve a break after the exam.
+establish|истэблиш|основывать||The school was established a hundred years ago.
+explore|иксплор|исследовать||We explored the old streets of the town.
+attend|этэнд|посещать (занятия)||I attend a chess club on Fridays.
+contribute|кэнтрибьют|вносить вклад||Everyone contributed to the project.
+afford|эфорд|позволить себе (по деньгам)||We can't afford a new car this year.
+announce|энаунс|объявлять||They announced that the train was late.
+arrange|эрэйндж|организовывать, договариваться||Mum arranged a meeting with the teacher.
+recognise|рэкэгнайз|узнавать (кого-то)||I didn't recognise you in those glasses!
+rely on|рилай он|полагаться на||You can always rely on your family.
+respond|риспонд|отвечать, реагировать||Please respond to my message.
+succeed|сэксид|добиться успеха||If you practise, you will succeed.
+warn|уон|предупреждать||The sign warns drivers about camels on the road.
+wonder|уандэ|задаваться вопросом||I wonder how old these mountains are.
+#collocations
+make a decision|мэйк э дисижн|принять решение||It's time to make a decision.
+make progress|мэйк прогрэс|делать успехи||You're making great progress in English.
+make a mistake|мэйк э мистэйк|ошибиться||It's OK to make a mistake.
+make an effort|мэйк эн эфэт|приложить усилия||Make an effort to learn five words a day.
+do your best|ду ё бэст|постараться изо всех сил||Just do your best in the race.
+take a break|тэйк э брэйк|сделать перерыв||Let's take a break and drink some tea.
+take a photo|тэйк э фоутоу|сфотографировать||Take a photo of the mountains!
+take part in|тэйк пат ин|принимать участие в||I took part in a science fair.
+pay attention|пэй этэншн|обращать внимание||Pay attention to the road signs.
+keep in touch|кип ин тач|оставаться на связи||Let's keep in touch after the holidays.
+catch a train|кэтч э трэйн|успеть на поезд||We ran to catch the train.
+have fun|хэв фан|хорошо провести время||Have fun at the camp!
+save time|сэйв тайм|экономить время||Flying saves a lot of time.
+waste time|уэйст тайм|тратить время зря||Don't waste time on your phone.
+break a record|брэйк э рэкод|побить рекорд||She broke the school record in running.
+tell the truth|тэл зэ трус|говорить правду||Always tell the truth.
+give advice|гив эдвайс|давать совет||My grandpa gives great advice.
+run out of|ран аут ов|израсходовать, закончиться||We ran out of petrol near the village.
+look forward to|лук фовэд ту|ждать с нетерпением||I'm looking forward to the holidays.
+get used to|гет юст ту|привыкать к||I got used to waking up early.
+come up with|кам ап уиз|придумать||She came up with a great idea.
+deal with|дил уиз|справляться с||How do you deal with stress?
+figure out|фигэ аут|разобраться, понять как||I can't figure out this map.
+put off|пут оф|откладывать||Don't put off your homework.
+carry on|кэри он|продолжать||Carry on, you're doing well!
+#travel
+accommodation|экомэдэйшн|жильё (в поездке)||We found cheap accommodation near the centre.
+itinerary|айтинэрэри|план поездки||Our itinerary includes three cities.
+reservation|рэзэвэйшн|бронирование||I have a reservation for two nights.
+landscape|лэндскэйп|пейзаж, ландшафт||The landscape changes from steppe to mountains.
+sightseeing|сайтсиинг|осмотр достопримечательностей||We went sightseeing in Shymkent.
+landmark|лэндмак|достопримечательность, ориентир||Baiterek is a famous landmark in Astana.
+local|лоукл|местный||Try the local food.
+foreign|форин|иностранный||Learning a foreign language opens many doors.
+culture|калчэ|культура||Every country has its own culture.
+tradition|трэдишн|традиция||Drinking tea together is a Kazakh tradition.
+heritage|хэритидж|наследие||Old mausoleums are part of our heritage.
+ancient|эйншнт|древний||The Silk Road was an ancient trade route.
+crossroads|кросроудз|перекрёсток||Turn right at the crossroads.
+fuel|фьюэл|топливо||Planes use a lot of fuel.
+vehicle|виэкл|транспортное средство||Only electric vehicles can enter this zone.
+equipment|икуипмэнт|снаряжение, оборудование||Check your equipment before the hike.
+emergency|имёрджэнси|чрезвычайная ситуация||In an emergency, call 112.
+schedule|шэдьюл|график||My schedule is very busy this week.
+#academic
+environment|инвайрэнмэнт|окружающая среда||We must protect the environment.
+climate|клаймит|климат||The climate in Astana is very cold in winter.
+population|попьюлэйшн|население||Almaty has a population of over two million people.
+capital|кэпитл|столица||Astana is the capital of Kazakhstan.
+region|риджэн|регион, край||Each region has its own traditions.
+average|эвэридж|средний||The average speed of our train was 80 km per hour.
+experience|икспиэриэнс|опыт; впечатление||Travelling is a great experience.
+knowledge|нолидж|знания||Books give us knowledge.
+research|рисёч|исследование||They did research on wild horses.
+evidence|эвидэнс|доказательство||There is no evidence that the story is true.
+opinion|эпиньэн|мнение||In my opinion, the mountains are the best.
+reason|ризн|причина||What is the reason for the delay?
+result|ризалт|результат||The results of the test were good.
+advantage|эдвантидж|преимущество||One advantage of trains is comfort.
+disadvantage|дисэдвантидж|недостаток||The disadvantage is that it's slow.
+opportunity|опэтьюнити|возможность||This trip is a great opportunity to learn.
+challenge|чэлиндж|трудная задача, вызов||Climbing the mountain was a real challenge.
+goal|гоул|цель||My goal is to visit every region.
+skill|скил|навык||Reading a map is a useful skill.
+argument|агьюмэнт|спор; довод||They had an argument about the route.
+memory|мэмэри|память; воспоминание||This trip is my best memory.
+attitude|этитьюд|отношение (к чему-то)||A positive attitude helps a lot.
+behaviour|бихэйвьэ|поведение||Good behaviour makes everyone happy.
+benefit|бэнэфит|польза||Walking has many health benefits.
+community|кэмьюнити|сообщество||Our community helps older people.
+competition|компэтишн|соревнование, конкурс||He won a maths competition.
+invention|инвэншн|изобретение||The wheel was a great invention.
+#adjectives
+reliable|рилайэбл|надёжный||Trains are reliable even in winter.
+convenient|кэнвиниэнт|удобный (по времени, месту)||The station is in a convenient place.
+comfortable|камфтэбл|комфортный||The new seats are very comfortable.
+exhausted|игзостид|измученный, без сил||After the hike we were exhausted.
+curious|кьюэриэс|любопытный||Cats are curious animals.
+confident|конфидэнт|уверенный||She feels confident before the exam.
+independent|индипэндэнт|независимый||Kazakhstan became independent in 1991.
+responsible|риспонсэбл|ответственный||You are responsible for your little sister.
+generous|джэнэрэс|щедрый||Our hosts were very generous.
+patient|пэйшнт|терпеливый||Be patient, we're almost there.
+honest|онист|честный||Thank you for being honest.
+impressive|импрэсив|впечатляющий||The view from the top is impressive.
+essential|исэншл|необходимый||Water is essential on a long hike.
+obvious|обвиэс|очевидный||The answer is obvious!
+huge|хьюдж|огромный||The steppe is huge.
+narrow|нэроу|узкий||The mountain road is narrow.
+steep|стип|крутой (о склоне)||The path is steep — be careful.
+remote|римоут|отдалённый||They live in a remote village.
+rural|руэрэл|сельский||Rural life is quiet and calm.
+urban|ёбэн|городской||Urban areas are growing fast.
+#idioms
+break the ice|брэйк зэ айс|растопить лёд (начать общение)||A funny joke helped to break the ice.
+piece of cake|пис ов кэйк|проще простого||The test was a piece of cake.
+on the way|он зэ уэй|по пути||We stopped for tea on the way.
+hit the road|хит зэ роуд|отправиться в путь||It's late, let's hit the road!
+once in a blue moon|уанс ин э блу мун|очень редко||It snows here once in a blue moon.
+under the weather|андэ зэ уэзэ|неважно себя чувствовать||I'm feeling a bit under the weather.
+in the same boat|ин зэ сэйм боут|в одинаковом положении||We're all in the same boat.
+better late than never|бэтэ лэйт зэн нэвэ|лучше поздно, чем никогда||You finished the book? Better late than never!
+time flies|тайм флайз|время летит||Time flies when you're travelling.
+get lost|гет лост|заблудиться||We got lost in the old town.
+cost an arm and a leg|кост эн ам энд э лэг|стоить целое состояние||That hotel costs an arm and a leg.
+learn by heart|лёрн бай хат|выучить наизусть||I learned the poem by heart.
+be about to|би эбаут ту|вот-вот (что-то сделать)||The train is about to leave.
+on time|он тайм|вовремя||Our flight left on time.
+in advance|ин эдванс|заранее||Book your tickets in advance.
+get along with|гет элонг уиз|ладить с||I get along well with my cousins.
+turn out|тёрн аут|оказаться||The trip turned out to be amazing.
+keep an eye on|кип эн ай он|присматривать за||Keep an eye on our bags, please.
