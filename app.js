@@ -15,6 +15,7 @@ let PUB = LS.get('zhol_pub', null);
 let SESSION = LS.get('zhol_me', null);
 let ME = null, REQS = [], ADMIN = null, PIN = null, TAB = 'map';
 let FAM = LS.get('zhol_fam', null), FAMDATA = null;
+let PRES = { now: null, kids: {}, fams: {} }, presT = 0, lastHb = 0;
 
 /* ---------- сеть ---------- */
 function setNet(ok) { $('#net').classList.toggle('hidden', ok); }
@@ -159,14 +160,14 @@ async function boot() {
   show('login');
 }
 $('#toParent').onclick = () => codePad('Администратор', 'Введите PIN (по умолчанию 0000 — смените его)', { min: 4, max: 8, onSubmit: async (pin, fail) => {
-  try { const r = await rpc('zhol_admin', { pin, action: 'overview', payload: {} }); if (!r.ok) return fail(errText(r.error)); PIN = pin; ADMIN = r; closeSheet(); show('admin'); renderAdmin(); setTimeout(() => chatTick(), 300); }
+  try { const r = await rpc('zhol_admin', { pin, action: 'overview', payload: {} }); if (!r.ok) return fail(errText(r.error)); PIN = pin; ADMIN = r; closeSheet(); show('admin'); renderAdmin(); setTimeout(() => chatTick(), 300); presenceStart(); }
   catch (e) { fail(e.offline ? 'Нет сети' : e.message); }
 } });
-$('#logout').onclick = () => { if (!confirm('Выйти? На этом устройстве нужно будет снова ввести код.')) return; if (isTest(SESSION?.id)) { LS.del('zhol_test'); loadPub().then(renderKids).catch(() => {}); } LS.del('zhol_me'); SESSION = null; ME = null; chatClose(); chatBadge(0); show('login'); renderKids(); };
+$('#logout').onclick = () => { if (!confirm('Выйти? На этом устройстве нужно будет снова ввести код.')) return; if (isTest(SESSION?.id)) { LS.del('zhol_test'); loadPub().then(renderKids).catch(() => {}); } LS.del('zhol_me'); SESSION = null; ME = null; presenceStop(); chatClose(); chatBadge(0); show('login'); renderKids(); };
 
 /* ---------- приложение ---------- */
 let pollT;
-function enterApp() { uiLangSync(); show('app'); renderApp(); setTimeout(() => chatTick(), 300); clearInterval(pollT); pollT = setInterval(() => { if (!$('#app').classList.contains('hidden')) refresh(); }, 30000); }
+function enterApp() { uiLangSync(); show('app'); renderApp(); setTimeout(() => chatTick(), 300); presenceStart(); clearInterval(pollT); pollT = setInterval(() => { if (!$('#app').classList.contains('hidden')) refresh(); }, 30000); }
 async function refresh() {
   try { await loadPub(); const r = await rpc('zhol_login', { p: SESSION.id, code: SESSION.code }); if (r.ok) { ME = r.me; REQS = r.requests; } } catch (e) {}
   renderApp();
@@ -229,7 +230,8 @@ function renderMap(svg = $('#map'), focusTrip = ME?.trip, doneOverride) {
     g.list.forEach((p, i) => {
       const me = ME && p.id === ME.id, r = me ? 12 : 9, dx = (i - (g.list.length - 1) / 2) * 15, x = g.pos[0] + dx, y = g.pos[1] - 20;
       if (me) mePos = [x, y];
-      s += `<g class="pin"><circle cx="${x}" cy="${y}" r="${r}" fill="${p.color}" stroke="#fff" stroke-width="${me ? 3 : 2}"/><text x="${x}" y="${y + (me ? 5 : 4)}" text-anchor="middle" style="font-size:${me ? 14 : 11}px">${p.avatar}</text></g>`;
+      const on = onlineOf(p.id);
+      s += `<g class="pin"><circle cx="${x}" cy="${y}" r="${r}" fill="${p.color}" stroke="#fff" stroke-width="${me ? 3 : 2}"/><text x="${x}" y="${y + (me ? 5 : 4)}" text-anchor="middle" style="font-size:${me ? 14 : 11}px">${p.avatar}</text>${on ? `<circle class="odot-pin" cx="${x + r * 0.62}" cy="${y + r * 0.62}" r="${me ? 4 : 3.2}" fill="#22c55e" stroke="#fff" stroke-width="1.3"/>` : ''}</g>`;
     });
   }
   svg.innerHTML = s;
@@ -280,6 +282,8 @@ function renderMapPanel() {
   h += `<div class="muted" style="margin-top:10px">🎫 Билет на самолёт — за каждые ${cfg.ticket_every_km} км по земле (осталось ${fmt(cfg.ticket_every_km - ME.ticket_km)} км). 🎁 В сумке: ${ME.gifts.length ? ME.gifts.map(g => esc(nodes()[g]?.souvenir)).join(', ') : 'пусто'}.</div>`;
   const kt = PUB.family.kordai_today || [];
   h += `<div class="muted" style="margin-top:8px">🏡 Сегодня у Ата и Әже: ${kt.length ? kt.map(id => PUB.players.find(p => p.id === id)?.avatar).join(' ') : 'пока никто не доехал'}</div>`;
+  const onKids = PUB.players.filter(p => onlineOf(p.id));
+  h += `<div class="onlinebar" data-oncount>${onlineLine()}</div>${onKids.length ? `<div class="onlist">${onKids.map(p => `<span>${p.avatar} ${esc(p.name)}</span>`).join(' · ')}</div>` : ''}`;
   $('#mapPanel').innerHTML = h;
   $('#newBtn').onclick = () => openPlan();
   if ($('#contBtn')) $('#contBtn').onclick = () => openTrip();
@@ -746,10 +750,10 @@ function renderFamily() {
     <div class="row"><div class="av">🏡</div><div class="grow"><b>Все 8 у Ата и Әже в один день</b><small>Сегодня в Кордае: ${kt.length}/8 ${kt.map(id => PUB.players.find(p => p.id === id)?.avatar).join(' ')}</small></div>${kt.length >= 8 ? '<span class="tag ok">Есть!</span>' : ''}</div>
     <div class="row"><div class="av">🗺️</div><div class="grow"><b>Круг по всем городам</b><small>Семья побывала в ${f.all_visited.length} из ${all} мест на карте</small></div>${f.all_visited.length >= all ? '<span class="tag ok">Есть!</span>' : ''}</div></div>`;
   h += raceCard();
-  h += `<div class="card"><h3>🏆 Лиги недели (км)</h3><div class="muted">Соревнуются ровесники — так у каждого есть шанс.</div>`;
+  h += `<div class="card"><h3>🏆 Лиги недели (км)</h3><div class="onlinebar" data-oncount>${onlineLine()}</div><div class="muted">Соревнуются ровесники — так у каждого есть шанс.</div>`;
   for (const lg of ['young', 'mid', 'old']) {
     const ps = PUB.players.filter(p => p.league === lg).sort((a, b) => b.week_km - a.week_km);
-    h += `<h4 style="margin:12px 0 2px">${Z.LEAGUES[lg].name} <span class="muted">${Z.LEAGUES[lg].sub}</span></h4>` + ps.map((p, i) => `<div class="row"><div class="av" style="background:${p.color}33">${p.avatar}</div><div class="grow"><b>${i === 0 && p.week_km > 0 ? '👑 ' : ''}${esc(p.name)}</b><small>${p.trip ? `в пути → ${esc(nname(p.trip.path.at(-1)))}` : '📍 ' + esc(nname(p.location))}</small></div><b>${fmt(p.week_km)} км</b></div>`).join('');
+    h += `<h4 style="margin:12px 0 2px">${Z.LEAGUES[lg].name} <span class="muted">${Z.LEAGUES[lg].sub}</span></h4>` + ps.map((p, i) => `<div class="row"><div class="av" style="background:${p.color}33">${p.avatar}${odot(p.id)}</div><div class="grow"><b>${i === 0 && p.week_km > 0 ? '👑 ' : ''}${esc(p.name)} ${seenHtml(p.id)}</b><small>${p.trip ? `в пути → ${esc(nname(p.trip.path.at(-1)))}` : '📍 ' + esc(nname(p.location))}</small></div><b>${fmt(p.week_km)} км</b></div>`).join('');
   }
   h += `</div>`;
   $('#tab-family').innerHTML = h;
@@ -842,15 +846,15 @@ async function testReset() {
 }
 let famPoll;
 function enterFamily(r) {
-  ME = null; show('parent'); renderFamilyView(r); setTimeout(() => chatTick(), 300);
+  ME = null; show('parent'); renderFamilyView(r); setTimeout(() => chatTick(), 300); presenceStart();
   clearInterval(famPoll); famPoll = setInterval(refreshFamily, 60000);
 }
 async function refreshFamily() {
   if ($('#parent').classList.contains('hidden') || !FAM) return;
   try { const r = await rpc('zhol_family_login', { f: FAM.id, code: FAM.code }); if (r.ok) renderFamilyView(r); else if (r.error === 'bad_code' || r.error === 'expired') { famLogout(); alert(r.error === 'expired' ? 'Срок гостевого входа закончился' : 'Код семьи изменился — войдите заново'); } } catch (e) {}
 }
-document.addEventListener('visibilitychange', () => { if (!document.hidden) { if (vis('parent')) refreshFamily(); chatTick(true); } });
-function famLogout() { chatClose(); chatBadge(0); clearInterval(famPoll); LS.del('zhol_fam'); LS.del('zhol_famdata'); LS.set('zhol_mode', ''); FAM = null; FAMDATA = null; show('login'); loadPub().then(renderKids).catch(() => {}); }
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { if (vis('parent')) refreshFamily(); chatTick(true); presenceBeat(true); } });
+function famLogout() { presenceStop(); chatClose(); chatBadge(0); clearInterval(famPoll); LS.del('zhol_fam'); LS.del('zhol_famdata'); LS.set('zhol_mode', ''); FAM = null; FAMDATA = null; show('login'); loadPub().then(renderKids).catch(() => {}); }
 $('#famExit').onclick = () => { if (confirm('Выйти из семейного просмотра?')) famLogout(); };
 $('#famRefresh').onclick = () => { refreshFamily(); toast('Обновлено'); };
 const KK_MON = ['қаң.', 'ақп.', 'нау.', 'сәу.', 'мам.', 'мау.', 'шіл.', 'там.', 'қыр.', 'қаз.', 'қар.', 'жел.'];
@@ -859,6 +863,82 @@ const dday = s => { if (LG() !== 'kk') return new Date(s).toLocaleDateString(LOC
 const dtime = s => { const p = dparts(s); return `${p.hour}:${p.minute}`; };
 const fdt = s => `${dday(s)}, ${dtime(s)}`;
 const fdate = s => { if (LG() !== 'kk') return new Date(s).toLocaleDateString(LOC(), { timeZone: 'Asia/Almaty' }); const p = dparts(s); return `${p.day}.${p.month}.${p.year}`; };
+
+/* ---------- онлайн-статус ---------- */
+function presenceStop() { clearInterval(presT); presT = 0; lastHb = 0; }
+function presenceStart() { presenceStop(); presenceBeat(true); presT = setInterval(() => presenceBeat(false), 30000); }
+function presApply(r) {
+  if (!r || !r.ok) return;
+  const kids = {}, fams = {};
+  for (const k of r.kids || []) kids[k.id] = k.last_seen || null;
+  for (const f of r.families || []) fams[f.id] = f.last_seen || null;
+  PRES = { now: r.now, kids, fams };
+}
+async function presenceBeat(force) {
+  const c = chatId(); if (!c || document.hidden) return;
+  try {
+    if (force || !lastHb || Date.now() - lastHb > 55000) {
+      await rpc('zhol_heartbeat', { who: c.who, uid: c.uid, code: c.code });
+      lastHb = Date.now();
+    }
+    const r = await rpc('zhol_presence', { who: c.who, uid: c.uid, code: c.code });
+    presApply(r); paintPresence();
+  } catch (e) {}
+}
+function onlineOf(id, kind) {
+  const ls = (kind === 'family' ? PRES.fams : PRES.kids)[id];
+  if (!ls || !PRES.now) return false;
+  return (new Date(PRES.now) - new Date(ls)) < 120000;
+}
+function ymd(s) { const p = dparts(s); return `${p.year}-${p.month}-${p.day}`; }
+function isYest(ls, nowIso) {
+  return ymd(ls) === ymd(new Date(new Date(nowIso).getTime() - 86400000).toISOString());
+}
+function seenLabel(id, kind) {
+  const ls = (kind === 'family' ? PRES.fams : PRES.kids)[id];
+  if (!ls) return '';
+  const nowIso = PRES.now || new Date().toISOString();
+  const sec = Math.max(0, (new Date(nowIso) - new Date(ls)) / 1000);
+  if (sec < 120) return '';
+  if (sec < 3600) return `был(а) ${Math.max(2, Math.round(sec / 60))} мин назад`;
+  if (ymd(ls) === ymd(nowIso)) return `сегодня в ${dtime(ls)}`;
+  if (sec < 86400) return `был(а) ${Math.max(1, Math.round(sec / 3600))} ч назад`;
+  if (isYest(ls, nowIso)) return `вчера в ${dtime(ls)}`;
+  const p = dparts(ls); return `${p.day}.${p.month} в ${dtime(ls)}`;
+}
+function onlineCount() { return Object.keys(PRES.kids).filter(id => onlineOf(id)).length; }
+function onlineLine() { return '🟢 Сейчас в игре: ' + onlineCount(); }
+function odot(id, kind) { return `<i class="odot${onlineOf(id, kind) ? '' : ' off'}" data-odot="${esc(id)}" data-skind="${kind || 'kid'}"></i>`; }
+function seenHtml(id, kind) {
+  kind = kind || 'kid';
+  if (onlineOf(id, kind)) return `<span class="onl" data-seen="${esc(id)}" data-skind="${kind}" title="сейчас в игре">🟢</span>`;
+  const t = seenLabel(id, kind);
+  return `<span class="seen" data-seen="${esc(id)}" data-skind="${kind}">${t ? esc(t) : ''}</span>`;
+}
+function chatPeopleDraw() {
+  const box = $('#chatPeople'); if (!box) return;
+  const list = CHAT.people || [];
+  if (!list.length) { box.innerHTML = ''; box.classList.add('hidden'); return; }
+  box.classList.remove('hidden');
+  box.innerHTML = list.map(p => {
+    const on = onlineOf(p.id, p.kind), t = seenLabel(p.id, p.kind);
+    const tip = esc(p.name) + (on ? ' · сейчас в игре' : t ? ' · ' + t : '');
+    return `<span class="cp${on ? ' on' : ''}" title="${tip}"><span class="cav" style="width:28px;height:28px;font-size:16px;background:${p.kind === 'kid' ? '#fff' : '#f5a524'}">${p.avatar}${odot(p.id, p.kind)}</span></span>`;
+  }).join('') + `<span class="cp-n" data-oncount>${onlineLine()}</span>`;
+}
+function paintPresence() {
+  document.querySelectorAll('[data-odot]').forEach(el => el.classList.toggle('off', !onlineOf(el.dataset.odot, el.dataset.skind || 'kid')));
+  document.querySelectorAll('[data-seen]').forEach(el => {
+    const id = el.dataset.seen, kind = el.dataset.skind || 'kid';
+    if (onlineOf(id, kind)) { el.className = 'onl'; el.title = 'сейчас в игре'; el.textContent = '🟢'; }
+    else { el.className = 'seen'; el.removeAttribute('title'); el.textContent = seenLabel(id, kind); }
+  });
+  document.querySelectorAll('[data-oncount]').forEach(el => { el.textContent = onlineLine(); });
+  if (CHAT.open) chatPeopleDraw();
+  if (vis('app') && TAB === 'map') renderMap();
+  if (vis('parent') && $('#pmap')) renderMap($('#pmap'), null);
+}
+
 function tripLine(p) {
   if (!p.trip) return `📍 ${p.location === 'KOR' ? 'в Кордае, у Ата и Әже 🏡' : 'в ' + esc(nname(p.location))}`;
   const T = Z.TRANSPORT[p.trip.transport], pct = Math.round(100 * p.trip.done / p.trip.total), org = p.trip.origin || p.trip.path[0];
@@ -879,7 +959,7 @@ function renderFamilyView(r) {
   const kidCard = k => {
     const trips = r.activity.filter(a => a.player === k.id && a.kind === 'arrive').slice(0, 3);
     const pct = k.trip ? Math.min(100, 100 * k.trip.done / k.trip.total) : null;
-    return `<div class="card kidcard"><div class="row" style="border:0;padding-top:0"><div class="av" style="background:${k.color};width:48px;height:48px;font-size:28px">${k.avatar}</div><div class="grow"><b style="font-size:18px">${esc(k.name)}</b><small>${k.age} лет · ${esc(k.school)} · ${Z.LEAGUES[k.league].name}</small></div><div class="chip" style="background:#fff1cf;color:#3a2400"><b>${k.tokens}</b> 🪙</div></div>
+    return `<div class="card kidcard"><div class="row" style="border:0;padding-top:0"><div class="av" style="background:${k.color};width:48px;height:48px;font-size:28px">${k.avatar}${odot(k.id)}</div><div class="grow"><b style="font-size:18px">${esc(k.name)} ${seenHtml(k.id)}</b><small>${k.age} лет · ${esc(k.school)} · ${Z.LEAGUES[k.league].name}</small></div><div class="chip" style="background:#fff1cf;color:#3a2400"><b>${k.tokens}</b> 🪙</div></div>
       <div class="kstatus">${tripLine(k)}</div>${pct !== null ? `<div class="bar"><i style="width:${pct}%"></i></div><div class="muted">${fmt(k.trip.done)} из ${fmt(k.trip.total)} км</div>` : ''}
       <div class="stats"><div class="stat"><b>${fmt(k.today_km)}</b><small>км сегодня</small></div><div class="stat"><b>${fmt(k.week_km)}</b><small>км за неделю</small></div><div class="stat"><b>${fmt(k.km_total)}</b><small>км всего</small></div></div>
       <div class="kblock"><b>⭐ Добрые дела:</b> ${k.stars || 0} ⭐ · открыто краёв ${(k.unlocked || []).length} из ${REGS().length}${(k.unlocked || []).length ? ' — ' + k.unlocked.map(u => esc(regInfo(u).n)).join(', ') : ''}${nextReg(k) ? ` · до «${esc(nextReg(k).n)}» ещё ${Math.max(0, nextReg(k).need - (k.stars || 0))} ⭐` : ''}</div>${enFamLine(k)}
@@ -899,14 +979,14 @@ function renderFamilyView(r) {
   if (r.family.all) for (const fm of r.families || []) { const ks = r.kids.filter(k => k.family === fm.id); if (ks.length) kh += `<h2 class="famhead">🏡 ${esc(fm.name)}</h2>` + ks.map(kidCard).join(''); }
   else kh = r.kids.map(kidCard).join('');
   if (r.family.all && r.kids.some(k => k.family === r.family.id)) kh = `<h2 class="famhead">🐣 Ваш гостевой ребёнок</h2>` + r.kids.filter(k => k.family === r.family.id).map(kidCard).join('') + kh;
-  h += `<div class="fam-kids">${kh}</div>`;
+  h += `<div class="onlinebar" data-oncount style="margin:12px 4px 0">${onlineLine()}</div><div class="fam-kids">${kh}</div>`;
   const f = PUB.family, goal = weekGoal(), wk = +f.week_km;
   h += `<div class="fam-all"><div class="card"><h3>🏁 Вся семья</h3><div class="muted">Цель недели — все 8 детей доезжают из дома до Ата и Әже (${fmt(goal)} км).</div><div class="bar"><i style="width:${Math.min(100, 100 * wk / goal)}%"></i></div>
       <div class="stats"><div class="stat"><b>${fmt(wk)}</b><small>км за неделю</small></div><div class="stat"><b>${Math.round(100 * wk / goal)}%</b><small>цели недели</small></div><div class="stat"><b>${fmt(f.total_km)}</b><small>км всего</small></div></div></div>
     <div class="card"><h3>🗺️ Кто где и куда едет</h3><div class="mapwrap"><svg id="pmap" viewBox="0 0 1000 575"></svg></div>
-      ${PUB.players.map(p => `<div class="row"><div class="av" style="background:${p.color}33">${p.avatar}</div><div class="grow"><b>${esc(p.name)}</b><small>${tripLine(p)}</small></div></div>`).join('')}</div>
+      ${PUB.players.map(p => `<div class="row"><div class="av" style="background:${p.color}33">${p.avatar}${odot(p.id)}</div><div class="grow"><b>${esc(p.name)} ${seenHtml(p.id)}</b><small>${tripLine(p)}</small></div></div>`).join('')}</div>
     ${raceCard(r.family.all ? null : c => r.kids.some(k => k.id === c.challenger || k.id === c.opponent))}
-    <div class="card"><h3>🏆 Рейтинг недели</h3>${[...PUB.players].sort((a, b) => b.week_km - a.week_km || b.km_total - a.km_total).map((p, i) => `<div class="row"><div style="width:22px;font-weight:800">${i + 1}</div><div class="av" style="background:${p.color}33">${p.avatar}</div><div class="grow"><b>${esc(p.name)}</b><small>${Z.LEAGUES[p.league].name} · всего ${fmt(p.km_total)} км</small></div><b>${fmt(p.week_km)} км</b></div>`).join('')}</div>
+    <div class="card"><h3>🏆 Рейтинг недели</h3>${[...PUB.players].sort((a, b) => b.week_km - a.week_km || b.km_total - a.km_total).map((p, i) => `<div class="row"><div style="width:22px;font-weight:800">${i + 1}</div><div class="av" style="background:${p.color}33">${p.avatar}${odot(p.id)}</div><div class="grow"><b>${esc(p.name)} ${seenHtml(p.id)}</b><small>${Z.LEAGUES[p.league].name} · всего ${fmt(p.km_total)} км</small></div><b>${fmt(p.week_km)} км</b></div>`).join('')}</div>
     <div class="card"><h3>🕑 Последние события (${r.family.all ? 'все дети' : 'ваши дети'})</h3>${r.activity.length ? r.activity.slice(0, 15).map(a => `<div class="row"><div class="grow">${actLine(a, P)}<small>${fdt(a.at)}</small></div></div>`).join('') : '<div class="muted">Пока событий нет — дети ещё не выезжали.</div>'}</div></div>`;
   if (RO) h = `<div class="card testcard"><h3>👀 Гостевой просмотр</h3><div class="muted">Вы видите всех детей: карту, поездки, км, достижения и семейный чат — только просмотр, без подтверждений, удаления и сообщений. Подтверждать можно дела гостевого ребёнка «Айзере» (она скрыта от настоящих детей и рейтингов). Вход действует до 23:59 18.11 по Алматы.</div></div>` + h;
   else if (isTest(r.family.id)) h = `<div class="card testcard"><h3>🧪 Тестовый режим</h3><div class="muted">Эта семья и ребёнок «Тест (Асет)» скрыты от всех: их нет у детей, в рейтингах, итогах и общем чате.</div><button class="big-btn" id="tReset">♻️ Сбросить тестового ребёнка</button></div>` + h;
@@ -931,12 +1011,12 @@ async function adm(action, payload = {}) {
   try { const r = await rpc('zhol_admin', { pin: PIN, action, payload }); if (!r.ok) { alert(errText(r.error)); if (r.error === 'bad_pin' || r.error === 'locked') { show('login'); } return false; } ADMIN = r; renderAdmin(); return true; }
   catch (e) { alert(e.offline ? 'Нет сети' : e.message); return false; }
 }
-$('#adminExit').onclick = () => { chatClose(); chatBadge(0); PIN = null; ADMIN = null; show('login'); loadPub().then(renderKids).catch(() => {}); };
+$('#adminExit').onclick = () => { presenceStop(); chatClose(); chatBadge(0); PIN = null; ADMIN = null; show('login'); loadPub().then(renderKids).catch(() => {}); };
 function renderAdmin() {
   const A = ADMIN, cfg = A.config, P = id => A.players.find(p => p.id === id) || { avatar: '?', name: id };
   let h = `<div class="card"><h3>📬 Запросы детей</h3>${A.requests.filter(r => r.status === 'pending' || r.status === 'approved').map(r => `<div class="row"><div class="av">${P(r.player).avatar}</div><div class="grow"><b>${esc(P(r.player).name)}: ${kindTxt(r)}</b><small>${new Date(r.created_at).toLocaleString('ru-RU')} · ${stTag(r)}</small></div>
      ${r.status === 'pending' ? `<button class="btn p" data-dec="${r.id}" data-s="approved">✓</button><button class="btn r" data-dec="${r.id}" data-s="rejected">✕</button>` : `<button class="btn" data-dec="${r.id}" data-s="done">Выдано</button>`}</div>`).join('') || '<div class="muted">Новых запросов нет.</div>'}</div>`;
-  h += `<div class="card"><h3>👧👦 Дети</h3><table><tr><th></th><th>Где</th><th>км нед./всего</th><th>🪙</th><th>🎫</th></tr>${A.players.map(p => `<tr><td>${p.avatar} <b>${esc(p.name)}</b>${p.locked ? ' 🔒' : ''}<br><button class="btn" style="padding:4px 8px;margin-top:4px" data-act="${p.id}">⚙︎</button></td><td>${p.trip ? '→ ' + esc(nname(p.trip.path.at(-1))) + ' (' + fmt(p.trip.done) + '/' + fmt(p.trip.total) + ')' : esc(nname(p.location))}</td><td>${fmt(p.week_km)} / ${fmt(p.km_total)}</td><td>${p.tokens}<br><small class="muted">сегодня ${p.today_tokens}</small></td><td>${p.tickets}</td></tr>`).join('')}</table></div>`;
+  h += `<div class="card"><h3>👧👦 Дети</h3><div class="onlinebar" data-oncount>${onlineLine()}</div><table><tr><th></th><th>Где</th><th>км нед./всего</th><th>🪙</th><th>🎫</th></tr>${A.players.map(p => `<tr><td><span class="av" style="display:inline-grid;width:28px;height:28px;font-size:16px;vertical-align:middle">${p.avatar}${odot(p.id)}</span> <b>${esc(p.name)}</b> ${seenHtml(p.id)}${p.locked ? ' 🔒' : ''}<br><button class="btn" style="padding:4px 8px;margin-top:4px" data-act="${p.id}">⚙︎</button></td><td>${p.trip ? '→ ' + esc(nname(p.trip.path.at(-1))) + ' (' + fmt(p.trip.done) + '/' + fmt(p.trip.total) + ')' : esc(nname(p.location))}</td><td>${fmt(p.week_km)} / ${fmt(p.km_total)}</td><td>${p.tokens}<br><small class="muted">сегодня ${p.today_tokens}</small></td><td>${p.tickets}</td></tr>`).join('')}</table></div>`;
   h += `<div class="card"><h3>💱 Курс жетонов и лимиты</h3>
     <label>Курс</label><select id="cPreset"><option value="5">1 🪙 = 5 ₸</option><option value="10">1 🪙 = 10 ₸</option><option value="points">Только очки (без денег)</option><option value="custom">Свой курс</option></select>
     <label>₸ за 1 жетон (для «свой курс»)</label><input id="cTenge" type="number" min="0" value="${cfg.tenge_per_token}">
@@ -1116,14 +1196,14 @@ function chatApply(r) {
   const c = chatId(); if (!c) return;
   CHAT.msgs = r.messages; CHAT.mod = r.mod; CHAT.ro = !!r.ro; document.querySelector('.chat-in').classList.toggle('hidden', CHAT.ro); CHAT.last = r.last; LS.set(seenKey(c), r.last); chatBadge(0); CHAT.people = r.people || []; CHAT.rx = r.rx || {};
   const sig = r.messages.map(m => m.id + (m.deleted ? 'd' : '')).join(',') + CHAT.mod + JSON.stringify(CHAT.rx);
-  if (sig === CHAT.sig) return; CHAT.sig = sig; chatRender();
+  if (sig === CHAT.sig) { chatPeopleDraw(); return; } CHAT.sig = sig; chatRender(); chatPeopleDraw();
 }
 const ctime = s => { const d = new Date(s), t = dtime(s); return new Date().toDateString() === d.toDateString() ? t : dday(s) + ' ' + t; };
 function chatRender() {
   const L = $('#chatList'), atBottom = L.scrollHeight - L.scrollTop - L.clientHeight < 80;
   const MS = CHAT.msgs.filter(m => !(m.kind === 'system' && m.deleted));
   L.innerHTML = MS.length ? MS.map(m => m.kind === 'system' ? `<div class="cm sys"><span>${esc(m.text)}</span><small>${ctime(m.at)}</small>${CHAT.mod ? `<button class="cdel" data-cdel="${m.id}" title="Удалить">🗑</button>` : ''}</div>` :
-    `<div class="cm${m.mine ? ' mine' : ''}${m.at_me ? ' atme' : ''}" data-mid="${m.id}"><div class="cav" style="background:${m.color || (m.kind === 'admin' ? '#13283d' : '#f5a524')}">${m.avatar}</div><div class="cb"><div class="cn">${esc(m.name)} <small>${ctime(m.at)}</small>${CHAT.mod && !m.deleted ? `<button class="cdel" data-cdel="${m.id}" title="Удалить">🗑</button>` : ''}</div><div class="ct${m.deleted ? ' del' : ''}">${m.deleted ? 'сообщение удалено' : chatText(m)}</div>${m.deleted ? '' : rxHtml(m)}</div></div>`).join('')
+    `<div class="cm${m.mine ? ' mine' : ''}${m.at_me ? ' atme' : ''}" data-mid="${m.id}"><div class="cav" style="background:${m.color || (m.kind === 'admin' ? '#13283d' : '#f5a524')}">${m.avatar}${(m.kind === 'kid' || m.kind === 'family') ? odot(m.author, m.kind) : ''}</div><div class="cb"><div class="cn">${esc(m.name)} ${(m.kind === 'kid' || m.kind === 'family') ? seenHtml(m.author, m.kind) : ''}<small>${ctime(m.at)}</small>${CHAT.mod && !m.deleted ? `<button class="cdel" data-cdel="${m.id}" title="Удалить">🗑</button>` : ''}</div><div class="ct${m.deleted ? ' del' : ''}">${m.deleted ? 'сообщение удалено' : chatText(m)}</div>${m.deleted ? '' : rxHtml(m)}</div></div>`).join('')
     : '<div class="empty">Пока тихо. Напиши первым — привет всей семье! 👋</div>';
   L.querySelectorAll('[data-cdel]').forEach(b => b.onclick = e => { e.stopPropagation(); chatDelete(+b.dataset.cdel); });
   L.querySelectorAll('.cm[data-mid] .cb').forEach(b => b.onclick = e => { if (e.target.closest('button')) return; const id = +b.closest('.cm').dataset.mid; CHAT.bar = CHAT.bar === id ? 0 : id; CHAT.who = null; chatRender(); });
@@ -1135,6 +1215,8 @@ function chatOpen() {
   const c = chatId(); if (!c) return;
   closeSheet(); CHAT.open = true; CHAT.sig = ''; CHAT.rendered = false; $('#chat').classList.remove('hidden'); document.body.classList.add('chat-on');
   $('#chatSub').textContent = c.who === 'admin' ? 'Вы пишете как «Асет (админ)»' : c.who === 'family' ? FAMDATA?.family?.ro ? '👀 Только чтение (гостевой вход)' : 'Вы пишете как ' + (FAMDATA?.family?.all ? '«Асет»' : '«Родители · ' + (FAMDATA?.family?.name || '') + '»') : 'Вся семья: 8 детей, родители и Асет';
+  if ($('#chatOn')) $('#chatOn').textContent = onlineLine();
+  chatPeopleDraw();
   $('#chatList').innerHTML = '<div class="empty">Загружаю…</div>'; chatFit();
   chatTick(true); clearInterval(CHAT.timer); CHAT.timer = setInterval(() => { if (CHAT.open) chatTick(); }, 5000);
   if (!matchMedia('(pointer:coarse)').matches) $('#chatIn').focus();
@@ -1378,7 +1460,7 @@ function goHome() {
   if (vis('admin')) { PIN = null; ADMIN = null; }
   if (ME && SESSION) { show('app'); setTab('map'); renderApp(); }
   else if (FAMDATA && LS.get('zhol_mode', '') === 'family') { show('parent'); }
-  else { show('login'); renderKids(); }
+  else { presenceStop(); show('login'); renderKids(); }
 }
 let lastBack = 0;
 function onBack() {

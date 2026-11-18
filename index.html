@@ -9,7 +9,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏡</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=19">
+<link rel="stylesheet" href="style.css?v=20">
 </head>
 <body>
 <div id="net" class="net hidden">Нет сети — прогресс сохраняется на устройстве</div>
@@ -88,7 +88,8 @@
 
 <!-- ЧАТ -->
 <section id="chat" class="chat hidden" aria-label="Семейный чат">
-  <header class="chat-top"><div><b>💬 Семейный чат</b><small id="chatSub"></small></div><button class="chip btn-ghost" id="chatClose" title="Закрыть">✕</button></header>
+  <header class="chat-top"><div><b>💬 Семейный чат</b><small id="chatSub"></small><small id="chatOn" class="chat-onl" data-oncount></small></div><button class="chip btn-ghost" id="chatClose" title="Закрыть">✕</button></header>
+  <div class="chat-people hidden" id="chatPeople"></div>
   <div class="chat-list" id="chatList"></div>
   <div class="chat-in"><div class="atpick hidden" id="atPick"></div><textarea id="chatIn" rows="1" maxlength="300" placeholder="Сообщение… 😊" enterkeyhint="send" autocomplete="off"></textarea><span id="chatCnt" class="ccnt"></span><button class="big-btn teal" id="chatSend" aria-label="Отправить">➤</button></div>
 </section>
@@ -96,10 +97,10 @@
 <div class="toast" id="toast"></div>
 <div id="modal" class="modal hidden"><div class="sheet" id="sheet"></div></div>
 
-<script src="data.js?v=19"></script>
-<script src="words.js?v=19"></script>
-<script src="cities_info.js?v=19"></script>
-<script src="i18n.js?v=19"></script>
-<script src="app.js?v=19"></script>
+<script src="data.js?v=20"></script>
+<script src="words.js?v=20"></script>
+<script src="cities_info.js?v=20"></script>
+<script src="i18n.js?v=20"></script>
+<script src="app.js?v=20"></script>
 </body>
 </html>

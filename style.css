@@ -324,3 +324,18 @@ body.chat-on{overflow:hidden}
 .stepbal b{font-size:26px}
 .stepbal small{color:#6b7c8c}
 .capnote.bonus{background:#e7f7ef;color:#155c3b}
+
+/* онлайн-статус */
+.av,.cav{position:relative}
+.odot{position:absolute;right:-1px;bottom:0;width:11px;height:11px;background:#22c55e;border:2px solid #fff;border-radius:50%;box-shadow:0 0 0 1px rgba(21,122,58,.35);pointer-events:none}
+.odot.off{display:none}
+.onl{font-size:13px;margin-left:2px}
+.seen{display:inline;margin-left:4px;font-size:11px;color:var(--muted);font-weight:600}
+.onlinebar{margin-top:10px;font-weight:800;font-size:15px;color:#157a3a}
+.onlist{margin-top:4px;font-size:13px;color:#3a5a45;font-weight:600}
+.chat-onl{display:block;opacity:.95;font-size:12px;color:#8dffc0;margin-top:2px}
+.chat-people{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:8px 10px 6px;background:var(--bg1);border-bottom:1px solid rgba(255,255,255,.08)}
+.chat-people.hidden{display:none}
+.chat-people .cp{position:relative;display:inline-flex}
+.chat-people .cav{background:#fff}
+.chat-people .cp-n{color:#8dffc0;font-size:12px;font-weight:800;margin-left:4px}
